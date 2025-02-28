@@ -267,7 +267,7 @@ class LBMSolverD2Q9GPU:
 def main():
     import time
 
-    nx, ny = 100, 100
+    nx, ny = 256, 256
     omega = 0.55
     U = 0.01
     solver = LBMSolverD2Q9GPU(nx, ny, omega, U)
@@ -286,6 +286,10 @@ def main():
     # Print performance
     elapsed = t1 - t0
     print(f"Ran {nsteps} steps in {elapsed:.3f} s, ~{nsteps/elapsed:.1f} steps/s")
+    
+    # MLUPS (Million Lattice Updates Per Second)
+    mlups = nx*ny*nsteps / (elapsed * 1e6)
+    print(f"Performance: {mlups:.2f} MLUPS")
 
     # Check center cell's fields
     rho, ux, uy = solver.compute_macroscopic()
