@@ -70,11 +70,15 @@ def streaming_kernel_periodic(f_in, f_out, nx, ny):
 # A simple (local) bounce-back that swaps populations for wall nodes.
 #--------------------------------------------------------------------
 @cuda.jit
-def bounce_back_kernel(f, nx, ny):
+def bounce_back_kernel(f, mask, nx, ny):
     i, j = cuda.grid(2)
     if i < nx and j < ny:
         # Apply bounce-back on left (i==0), right (i==nx-1) and bottom (j==0)
-        if (i == 0) or (i == nx - 1) or (j == 0) or (j == ny - 1):
+        #if (i == 0) or (i == nx - 1) or (j == 0) or (j == ny - 1):
+        #if (i == 1) or (i == nx - 2) or (j == 1):
+        
+        # Apply bounce-back at solid node:
+        if mask[i, j] == 1:
             # Swap east (1) and west (3)
             tmp = f[i, j, 1]
             f[i, j, 1] = f[i, j, 3]
@@ -100,37 +104,60 @@ def bounce_back_kernel(f, nx, ny):
 @cuda.jit
 def moving_lid_kernel(f, nx, ny, U):
     i = cuda.grid(1)  # iterate along x only
-    j = ny - 1        # top row
     if i < nx:
-        # Reflect the populations corresponding to directions pointing out of the domain.
-        # For the standard D2Q9, the unknown (incoming) populations at the top are indices 2, 5, 6.
-        f[i, j, 2] = f[i, j, 4]  # north <-- south
-        f[i, j, 5] = f[i, j, 7]  # north-east <-- south-west
-        f[i, j, 6] = f[i, j, 8]  # north-west <-- south-east
-
-        # Compute local density at the top node.
-        rho = 0.0
-        for k in range(9):
-            rho += f[i, j, k]
-        # Impart momentum by adding a correction to the east and diagonal populations.
-        f[i, j, 1] += (2.0/3.0) * rho * U
-        f[i, j, 5] += (1.0/6.0) * rho * U
-        f[i, j, 8] += (1.0/6.0) * rho * U
+        #if i != 1 or i != nx - 2:
+            j = ny - 2        # top row
+            rho = f[i, j, 0] + f[i, j, 1] + f[i, j, 3] + 2.0 * (f[i, j, 2] + f[i, j, 5] + f[i, j, 6])
+            f[i, j, 4] = f[i, j, 2]
+            f[i, j, 7] = f[i, j, 5] + 0.5 * (f[i, j, 1] - f[i, j, 3]) - 0.5 * rho * U
+            f[i, j, 8] = f[i, j, 6] - 0.5 * (f[i, j, 1] - f[i, j, 3]) + 0.5 * rho * U
+            
+            # f[i, j, 4] = f[i, j, 2] 
+            # f[i, j, 7] = f[i, j, 5] - 1.0/6.0 * U
+            # f[i, j, 8] = f[i, j, 6] + 1.0/6.0 * U
 
 class LBMSolverD2Q9GPU:
-    def __init__(self, nx, ny, omega):
+    def __init__(self, nx, ny, omega, U):
         self.nx = nx
         self.ny = ny
         self.omega = np.float32(omega)
+        self.U = U
 
         # Allocate device memory for distribution function
         self.f = cuda.device_array((nx, ny, 9), dtype=np.float32)
         self.f_new = cuda.device_array((nx, ny, 9), dtype=np.float32)
+        
+        # Allocate device memory for mask
+        self.mask = cuda.device_array((nx, ny), dtype=np.int8)
 
         # Choose thread-block dimensions
         self.blockdim = (16, 16)
         self.griddim = ((nx + self.blockdim[0] - 1)//self.blockdim[0],
                         (ny + self.blockdim[1] - 1)//self.blockdim[1])
+        
+    def set_mask(self):
+        """
+        define a mask for the solid boundary
+        """
+        mask_host = np.zeros((self.nx, self.ny), dtype=np.int8)
+
+        # define a circle in the center of the domain
+        # cx, cy = self.nx // 2, self.ny // 2
+        # r = min(cx, cy) // 2  
+        # for i in range(self.nx):
+        #     for j in range(self.ny):
+        #         dist2 = (i - cx)**2 + (j - cy)**2
+        #         if dist2 < r*r:
+        #             mask_host[i, j] = 1
+        
+        # define a open-lid square
+        for i in range(self.nx):
+            for j in range(self.ny):
+                if i == 1 or i == self.nx - 2 or j == 1:
+                    mask_host[i, j] = 1
+
+        # copy to device
+        self.mask.copy_to_device(mask_host)
 
     def initialize(self, rho0=1.0, u0x=0.1, u0y=0.0):
         """
@@ -145,6 +172,14 @@ class LBMSolverD2Q9GPU:
                     cu = 3.0*(cx_const[k]*u0x + cy_const[k]*u0y)
                     f_host[i, j, k] = w_const[k]*rho0*(1.0 + cu + 0.5*cu*cu - 1.5*usq)
 
+        # for j in range(self.ny):
+        #     if j != 1 or j != self.ny - 2:
+        #         i = self.nx - 2
+        #         usq = self.U*self.U
+        #         for k in range(9):
+        #             cu = 3.0*(cx_const[k]*self.U)
+        #             f_host[i, j, k] = w_const[k]*rho0*(1.0 + cu + 0.5*cu*cu - 1.5*usq)
+            
         self.f.copy_to_device(f_host)
 
     def step(self):
@@ -171,11 +206,15 @@ class LBMSolverD2Q9GPU:
         # cuda.synchronize()
 
         # 3) Bounce-back on f_new
-        bounce_back_kernel[self.griddim, self.blockdim](self.f_new,
+        bounce_back_kernel[self.griddim, self.blockdim](self.f_new, self.mask,
                                                         self.nx, self.ny)
         cuda.synchronize()
+        
+        # 4) Moving-lid boundary condition on top wall
+        moving_lid_kernel[self.griddim, self.blockdim](self.f_new, self.nx, self.ny, self.U)
+        cuda.synchronize()
 
-        # 4) Swap
+        # 5) Swap
         self.f, self.f_new = self.f_new, self.f
 
     def stream_periodic(self):
@@ -228,12 +267,16 @@ class LBMSolverD2Q9GPU:
 def main():
     import time
 
-    nx, ny = 128, 128
+    nx, ny = 100, 100
     omega = 0.55
-    solver = LBMSolverD2Q9GPU(nx, ny, omega)
+    U = 0.01
+    solver = LBMSolverD2Q9GPU(nx, ny, omega, U)
 
-    # Initialize with uniform density 1.0 and velocity (0.1, 0.0)
-    solver.initialize(rho0=1.0, u0x=0.01, u0y=0.02)
+    # Initialize with uniform density 1.0 and velocity (0.0, 0.0)
+    solver.initialize(rho0=1.0, u0x=0.0, u0y=0.0)
+    
+    # Set mask
+    solver.set_mask()
 
     nsteps = 10000
     t0 = time.time()
@@ -250,6 +293,8 @@ def main():
     print("Density at center:", rho[cx, cy])
     print("Velocity at center:", ux[cx, cy], uy[cx, cy])
     print("Average density", np.mean(rho))
+    print("Top wall velocity", ux[cx, ny-2], uy[cx, ny-2])
+    print("Top second wall velocity", ux[cx, ny-3], uy[cx, ny-3])
     
     # Plot the velocity field
     from plotter import plot_velocity_field_uxy
