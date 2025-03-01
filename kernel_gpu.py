@@ -267,9 +267,12 @@ class LBMSolverD2Q9GPU:
 def main():
     import time
 
-    nx, ny = 256, 256
-    omega = 0.55
-    U = 0.01
+    nx, ny = 1000, 1000
+    #omega = 0.56
+    U = 0.1
+    Re = 3000.0
+    nu = 3.0 * (U * float(nx) / Re) + 0.5
+    omega = 1.0 / nu
     solver = LBMSolverD2Q9GPU(nx, ny, omega, U)
 
     # Initialize with uniform density 1.0 and velocity (0.0, 0.0)
@@ -283,6 +286,11 @@ def main():
     solver.run(nsteps)
     t1 = time.time()
 
+    # Print Reynolds number
+    # nu = 1.0 / 3.0 * (1.0 / omega - 0.5)
+    # Re = U * nx / nu
+    # print(f"Reynolds number: {Re:.2f}")
+    
     # Print performance
     elapsed = t1 - t0
     print(f"Ran {nsteps} steps in {elapsed:.3f} s, ~{nsteps/elapsed:.1f} steps/s")
@@ -291,6 +299,11 @@ def main():
     mlups = nx*ny*nsteps / (elapsed * 1e6)
     print(f"Performance: {mlups:.2f} MLUPS")
 
+    # Print physical parameters
+    print(f"Reynolds number: {Re:.2f}")
+    print(f"omega = {omega:.3f}")
+    print(f"nu = {nu:.3f}")
+    
     # Check center cell's fields
     rho, ux, uy = solver.compute_macroscopic()
     cx, cy = nx//2, ny//2
@@ -301,8 +314,10 @@ def main():
     print("Top second wall velocity", ux[cx, ny-3], uy[cx, ny-3])
     
     # Plot the velocity field
-    from plotter import plot_velocity_field_uxy
+    from plotter import plot_velocity_field_uxy, save_velocity_field_vti
     plot_velocity_field_uxy(ux, uy)
+    #save_velocity_field_vtk(ux, uy, filename="velocity_field.vtk")
+    save_velocity_field_vti(ux, uy, filename="velocity_field.vti")
 
 if __name__ == "__main__":
     main()
