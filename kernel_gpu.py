@@ -1,13 +1,16 @@
 import numpy as np
 from numba import cuda
 
+# Data type macro
+DTYPE = np.float32  # or np.float64 for double precision
+
 #--------------------------------------------------------------------
 # Global constants for D2Q9 (Python tuples are accessible inside JITed kernels)
 #--------------------------------------------------------------------
 cx_const = (0,  1,  0, -1,  0,  1, -1, -1,  1)
 cy_const = (0,  0,  1,  0, -1,  1,  1, -1, -1)
-w_const  = (4.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
-            1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0)
+w_const  = tuple(DTYPE(w) for w in (4.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
+                                   1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0))
 
 #--------------------------------------------------------------------
 # CUDA kernel: Collision Step
@@ -107,11 +110,14 @@ def moving_lid_kernel(f, nx, ny, U):
     if i < nx:
         #if i != 1 or i != nx - 2:
             j = ny - 2        # top row
+            
+            # Zou-He wet node velocity boundary condition
             rho = f[i, j, 0] + f[i, j, 1] + f[i, j, 3] + 2.0 * (f[i, j, 2] + f[i, j, 5] + f[i, j, 6])
             f[i, j, 4] = f[i, j, 2]
             f[i, j, 7] = f[i, j, 5] + 0.5 * (f[i, j, 1] - f[i, j, 3]) - 0.5 * rho * U
             f[i, j, 8] = f[i, j, 6] - 0.5 * (f[i, j, 1] - f[i, j, 3]) + 0.5 * rho * U
             
+            # Ladd Link-based velocity boundary condition
             # f[i, j, 4] = f[i, j, 2] 
             # f[i, j, 7] = f[i, j, 5] - 1.0/6.0 * U
             # f[i, j, 8] = f[i, j, 6] + 1.0/6.0 * U
@@ -120,18 +126,18 @@ class LBMSolverD2Q9GPU:
     def __init__(self, nx, ny, omega, U):
         self.nx = nx
         self.ny = ny
-        self.omega = np.float32(omega)
-        self.U = U
+        self.omega = DTYPE(omega)
+        self.U = DTYPE(U)
 
         # Allocate device memory for distribution function
-        self.f = cuda.device_array((nx, ny, 9), dtype=np.float32)
-        self.f_new = cuda.device_array((nx, ny, 9), dtype=np.float32)
+        self.f = cuda.device_array((nx, ny, 9), dtype=DTYPE)
+        self.f_new = cuda.device_array((nx, ny, 9), dtype=DTYPE)
         
         # Allocate device memory for mask
         self.mask = cuda.device_array((nx, ny), dtype=np.int8)
 
         # Choose thread-block dimensions
-        self.blockdim = (16, 16)
+        self.blockdim = (8, 8)
         self.griddim = ((nx + self.blockdim[0] - 1)//self.blockdim[0],
                         (ny + self.blockdim[1] - 1)//self.blockdim[1])
         
@@ -163,7 +169,7 @@ class LBMSolverD2Q9GPU:
         """
         Initialize the distribution on the CPU, then copy to GPU.
         """
-        f_host = np.zeros((self.nx, self.ny, 9), dtype=np.float32)
+        f_host = np.zeros((self.nx, self.ny, 9), dtype=DTYPE)
 
         for i in range(self.nx):
             for j in range(self.ny):
@@ -244,9 +250,9 @@ class LBMSolverD2Q9GPU:
         Optionally compute density and velocity on the host after copying f.
         """
         f_host = self.get_distribution()
-        rho = np.zeros((self.nx, self.ny), dtype=np.float32)
-        ux  = np.zeros((self.nx, self.ny), dtype=np.float32)
-        uy  = np.zeros((self.nx, self.ny), dtype=np.float32)
+        rho = np.zeros((self.nx, self.ny), dtype=DTYPE)
+        ux  = np.zeros((self.nx, self.ny), dtype=DTYPE)
+        uy  = np.zeros((self.nx, self.ny), dtype=DTYPE)
 
         for i in range(self.nx):
             for j in range(self.ny):
@@ -267,10 +273,10 @@ class LBMSolverD2Q9GPU:
 def main():
     import time
 
-    nx, ny = 1000, 1000
+    nx, ny = 256, 256
     #omega = 0.56
     U = 0.1
-    Re = 3000.0
+    Re = 1000.0
     nu = 3.0 * (U * float(nx) / Re) + 0.5
     omega = 1.0 / nu
     solver = LBMSolverD2Q9GPU(nx, ny, omega, U)
@@ -314,10 +320,10 @@ def main():
     print("Top second wall velocity", ux[cx, ny-3], uy[cx, ny-3])
     
     # Plot the velocity field
-    from plotter import plot_velocity_field_uxy, save_velocity_field_vti
-    plot_velocity_field_uxy(ux, uy)
+    #from plotter import plot_velocity_field_uxy, save_velocity_field_vti
+    #plot_velocity_field_uxy(ux, uy)
     #save_velocity_field_vtk(ux, uy, filename="velocity_field.vtk")
-    save_velocity_field_vti(ux, uy, filename="velocity_field.vti")
+    #save_velocity_field_vti(ux, uy, filename="velocity_field.vti")
 
 if __name__ == "__main__":
     main()
