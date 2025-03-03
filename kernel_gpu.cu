@@ -150,36 +150,6 @@ __global__ void moving_lid_kernel(DTYPE* f, int nx, int ny, DTYPE U) {
 }
 
 //-----------------------------------------------------
-// CUDA kernel to compute the velocity magnitude field
-// and write it directly into the mapped PBO memory.
-// The output 'velocity_mag' is a 2D array of size nx*ny.
-//-----------------------------------------------------
-__global__ void compute_velocity_field_kernel(DTYPE* f, DTYPE* velocity_mag, int nx, int ny) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i < nx && j < ny) {
-        DTYPE rho = 0.0f;
-        DTYPE u_x = 0.0f;
-        DTYPE u_y = 0.0f;
-        for (int k = 0; k < numDirs; k++) {
-            DTYPE val = f[idx(i,j,k, nx, ny)];
-            rho += val;
-            u_x += val * cx_const[k];
-            u_y += val * cy_const[k];
-        }
-        if (rho > 1e-12f) {
-            u_x /= rho;
-            u_y /= rho;
-        }
-        DTYPE vel = sqrtf(u_x*u_x + u_y*u_y);
-        velocity_mag[i + j*nx] = vel;
-        // Multiply velocity by a scaling factor to amplify it for display
-        const DTYPE scale_factor = 1000.0f; // Adjust this constant as needed
-        velocity_mag[i + j*nx] = vel * scale_factor;
-    }
-}
-
-//-----------------------------------------------------
 // Host routines for initialization and simulation
 //-----------------------------------------------------
 void initialize_simulation() {
