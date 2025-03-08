@@ -24,7 +24,7 @@ class TestLBMSolverD2Q9GPU(unittest.TestCase):
         nx = 2
         ny = 2
         
-        lb = LBMSolverD2Q9GPU(nx, ny, 1.0)
+        lb = LBMSolverD2Q9GPU(nx, ny, 1.0, 0.0)
         lb.f.copy_to_device(f_in)
         lb.stream_periodic()
         f_out = lb.get_distribution()
