@@ -11,6 +11,15 @@ cx_const = (0,  1,  0, -1,  0,  1, -1, -1,  1)
 cy_const = (0,  0,  1,  0, -1,  1,  1, -1, -1)
 w_const  = tuple(DTYPE(w) for w in (4.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
                                    1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0))
+# Helper function for linear indexing
+@cuda.jit(device=True, inline=True)
+def idx(i, j, k, nx, ny):
+    """Linear memory indexing"""
+    return i + j * nx + k * nx * ny
+
+def idx_host(i, j, k, nx, ny):
+    """Host version of linear memory indexing"""
+    return i + j * nx + k * nx * ny
 
 #--------------------------------------------------------------------
 # CUDA kernel: Collision Step
@@ -25,7 +34,7 @@ def collision_kernel(f, omega, nx, ny):
         u_y = 0.0
         # Compute macroscopic density and momentum from distribution functions
         for k in range(9):
-            val = f[i, j, k]
+            val = f[idx(i, j, k, nx, ny)]
             rho += val
             u_x += val * cx_const[k]
             u_y += val * cy_const[k]
@@ -37,7 +46,7 @@ def collision_kernel(f, omega, nx, ny):
         for k in range(9):
             cu = 3.0 * (cx_const[k] * u_x + cy_const[k] * u_y)
             feq = w_const[k] * rho * (1.0 + cu + 0.5 * cu * cu - 1.5 * usqr)
-            f[i, j, k] = (1.0 - omega) * f[i, j, k] + omega * feq
+            f[idx(i, j, k, nx, ny)] = (1.0 - omega) * f[idx(i, j, k, nx, ny)] + omega * feq
 
 #--------------------------------------------------------------------
 # CUDA kernel: Streaming Step
@@ -53,11 +62,11 @@ def streaming_kernel(f_in, f_out, nx, ny):
             for k in range(9):
                 ip = i - cx_const[k]
                 jp = j - cy_const[k]
-                f_out[i, j, k] = f_in[ip, jp, k]
+                f_out[idx(i, j, k, nx, ny)] = f_in[idx(ip, jp, k, nx, ny)]
         else:
             # For boundary nodes, simply copy the current value.
             for k in range(9):
-                f_out[i, j, k] = f_in[i, j, k]
+                f_out[idx(i, j, k, nx, ny)] = f_in[idx(i, j, k, nx, ny)]
 
 @cuda.jit
 def streaming_kernel_periodic(f_in, f_out, nx, ny):
@@ -66,7 +75,7 @@ def streaming_kernel_periodic(f_in, f_out, nx, ny):
         for k in range(9):
             ip = (i - cx_const[k] + nx) % nx
             jp = (j - cy_const[k] + ny) % ny
-            f_out[i, j, k] = f_in[ip, jp, k]
+            f_out[idx(i, j, k, nx, ny)] = f_in[idx(i, j, k, nx, ny)]
 
 #--------------------------------------------------------------------
 # CUDA kernel: Bounce-Back on Left, Right, and Bottom Walls
@@ -83,21 +92,21 @@ def bounce_back_kernel(f, mask, nx, ny):
         # Apply bounce-back at solid node:
         if mask[i, j] == 1:
             # Swap east (1) and west (3)
-            tmp = f[i, j, 1]
-            f[i, j, 1] = f[i, j, 3]
-            f[i, j, 3] = tmp
+            tmp = f[idx(i, j, 1, nx, ny)]
+            f[idx(i, j, 1, nx, ny)] = f[idx(i, j, 3, nx, ny)]
+            f[idx(i, j, 3, nx, ny)] = tmp
             # Swap north (2) and south (4)
-            tmp = f[i, j, 2]
-            f[i, j, 2] = f[i, j, 4]
-            f[i, j, 4] = tmp
+            tmp = f[idx(i, j, 2, nx, ny)]
+            f[idx(i, j, 2, nx, ny)] = f[idx(i, j, 4, nx, ny)]
+            f[idx(i, j, 4, nx, ny)] = tmp
             # Swap north-east (5) and south-west (7)
-            tmp = f[i, j, 5]
-            f[i, j, 5] = f[i, j, 7]
-            f[i, j, 7] = tmp
+            tmp = f[idx(i, j, 5, nx, ny)]
+            f[idx(i, j, 5, nx, ny)] = f[idx(i, j, 7, nx, ny)]
+            f[idx(i, j, 7, nx, ny)] = tmp
             # Swap north-west (6) and south-east (8)
-            tmp = f[i, j, 6]
-            f[i, j, 6] = f[i, j, 8]
-            f[i, j, 8] = tmp
+            tmp = f[idx(i, j, 6, nx, ny)]
+            f[idx(i, j, 6, nx, ny)] = f[idx(i, j, 8, nx, ny)]
+            f[idx(i, j, 8, nx, ny)] = tmp
 
 #--------------------------------------------------------------------
 # CUDA kernel: Moving-Lid Boundary Condition on Top Wall
@@ -118,9 +127,29 @@ def moving_lid_kernel(f, nx, ny, U):
             # f[i, j, 8] = f[i, j, 6] - 0.5 * (f[i, j, 1] - f[i, j, 3]) + 0.5 * rho * U
             
             # Ladd Link-based velocity boundary condition
-            f[i, j, 4] = f[i, j, 2] 
-            f[i, j, 7] = f[i, j, 5] - 1.0/6.0 * U
-            f[i, j, 8] = f[i, j, 6] + 1.0/6.0 * U
+            f[idx(i, j, 4, nx, ny)] = f[idx(i, j, 2, nx, ny)] 
+            f[idx(i, j, 7, nx, ny)] = f[idx(i, j, 5, nx, ny)] - 1.0/6.0 * U
+            f[idx(i, j, 8, nx, ny)] = f[idx(i, j, 6, nx, ny)] + 1.0/6.0 * U
+
+@cuda.jit(fastmath=True)
+def compute_macro(f, nx, ny, rho, ux, uy):
+    i, j = cuda.grid(2)
+    if i < nx and j < ny:
+        rho_v = 0.0
+        u_x_v = 0.0
+        u_y_v = 0.0
+        # Compute macroscopic density and momentum from distribution functions
+        for k in range(9):
+            val = f[idx(i, j, k, nx, ny)]
+            rho_v += val
+            u_x_v += val * cx_const[k]
+            u_y_v += val * cy_const[k]
+        if rho_v > 0.0:
+            u_x_v /= rho_v
+            u_y_v /= rho_v
+        rho[i, j] = rho_v
+        ux[i, j] = u_x_v
+        uy[i, j] = u_y_v
 
 class LBMSolverD2Q9GPU:
     def __init__(self, nx, ny, omega, U):
@@ -130,8 +159,13 @@ class LBMSolverD2Q9GPU:
         self.U = DTYPE(U)
 
         # Allocate device memory for distribution function
-        self.f = cuda.device_array((nx, ny, 9), dtype=DTYPE)
-        self.f_new = cuda.device_array((nx, ny, 9), dtype=DTYPE)
+        self.f = cuda.device_array(nx * ny * 9, dtype=DTYPE)
+        self.f_new = cuda.device_array(nx * ny * 9, dtype=DTYPE)
+        
+        # Allocate device memory for macroscopic fields
+        self.d_rho = cuda.device_array((nx, ny), dtype=DTYPE)
+        self.d_ux = cuda.device_array((nx, ny), dtype=DTYPE)
+        self.d_uy = cuda.device_array((nx, ny), dtype=DTYPE)
         
         # Allocate device memory for mask
         self.mask = cuda.device_array((nx, ny), dtype=np.int8)
@@ -140,6 +174,8 @@ class LBMSolverD2Q9GPU:
         self.blockdim = (16, 16)
         self.griddim = ((nx + self.blockdim[0] - 1)//self.blockdim[0],
                         (ny + self.blockdim[1] - 1)//self.blockdim[1])
+        self.blockdim1d = 256
+        self.griddim1d = (nx + self.blockdim1d - 1) // self.blockdim1d
         
     def set_mask(self):
         """
@@ -169,23 +205,15 @@ class LBMSolverD2Q9GPU:
         """
         Initialize the distribution on the CPU, then copy to GPU.
         """
-        f_host = np.zeros((self.nx, self.ny, 9), dtype=DTYPE)
+        f_host = np.zeros(self.nx * self.ny * 9, dtype=DTYPE)
 
         for i in range(self.nx):
             for j in range(self.ny):
                 usq = u0x*u0x + u0y*u0y
                 for k in range(9):
                     cu = 3.0*(cx_const[k]*u0x + cy_const[k]*u0y)
-                    f_host[i, j, k] = w_const[k]*rho0*(1.0 + cu + 0.5*cu*cu - 1.5*usq)
-
-        # for j in range(self.ny):
-        #     if j != 1 or j != self.ny - 2:
-        #         i = self.nx - 2
-        #         usq = self.U*self.U
-        #         for k in range(9):
-        #             cu = 3.0*(cx_const[k]*self.U)
-        #             f_host[i, j, k] = w_const[k]*rho0*(1.0 + cu + 0.5*cu*cu - 1.5*usq)
-            
+                    f_host[idx_host(i, j, k, self.nx, self.ny)] = w_const[k]*rho0*(1.0 + cu + 0.5*cu*cu - 1.5*usq)
+         
         self.f.copy_to_device(f_host)
 
     def step(self):
@@ -196,32 +224,29 @@ class LBMSolverD2Q9GPU:
           3) bounce-back on f_new
           4) swap f and f_new
         """
-        # 1) Collision in-place on self.f
-        collision_kernel[self.griddim, self.blockdim](self.f, self.omega,
-                                                      self.nx, self.ny)
-        #cuda.synchronize()
-
-        # 2) Streaming: f -> f_new
-        streaming_kernel[self.griddim, self.blockdim](self.f, self.f_new,
-                                                      self.nx, self.ny)
-        #cuda.synchronize()
-        
-        # 2) Streaming with periodic boundary conditions
-        # streaming_kernel_periodic[self.griddim, self.blockdim](self.f, self.f_new,
-        #                                               self.nx, self.ny)
-        # cuda.synchronize()
-
-        # 3) Bounce-back on f_new
-        bounce_back_kernel[self.griddim, self.blockdim](self.f_new, self.mask,
+        # Enable asynchronous execution
+        with cuda.defer_cleanup():
+            # 1) Collision in-place on self.f
+            collision_kernel[self.griddim, self.blockdim](self.f, self.omega,
                                                         self.nx, self.ny)
-        #cuda.synchronize()
-        
-        # 4) Moving-lid boundary condition on top wall
-        moving_lid_kernel[self.griddim, self.blockdim](self.f_new, self.nx, self.ny, self.U)
-        #cuda.synchronize()
+            # 2) Streaming: f -> f_new
+            streaming_kernel[self.griddim, self.blockdim](self.f, self.f_new,
+                                                        self.nx, self.ny)
+            
+            # 2) Streaming with periodic boundary conditions
+            # streaming_kernel_periodic[self.griddim, self.blockdim](self.f, self.f_new,
+            #                                               self.nx, self.ny)
+            # cuda.synchronize()
 
-        # 5) Swap
-        self.f, self.f_new = self.f_new, self.f
+            # 3) Bounce-back on f_new
+            bounce_back_kernel[self.griddim, self.blockdim](self.f_new, self.mask,
+                                                            self.nx, self.ny)
+            
+            # 4) Moving-lid boundary condition on top wall
+            moving_lid_kernel[self.griddim1d, self.blockdim1d](self.f_new, self.nx, self.ny, self.U)
+
+            # 5) Swap
+            self.f, self.f_new = self.f_new, self.f
 
     def stream_periodic(self):
         # Streaming with periodic boundary conditions
@@ -249,26 +274,9 @@ class LBMSolverD2Q9GPU:
         """
         Optionally compute density and velocity on the host after copying f.
         """
-        f_host = self.get_distribution()
-        rho = np.zeros((self.nx, self.ny), dtype=DTYPE)
-        ux  = np.zeros((self.nx, self.ny), dtype=DTYPE)
-        uy  = np.zeros((self.nx, self.ny), dtype=DTYPE)
-
-        for i in range(self.nx):
-            for j in range(self.ny):
-                s = 0.0
-                sx = 0.0
-                sy = 0.0
-                for k in range(9):
-                    val = f_host[i, j, k]
-                    s  += val
-                    sx += val * cx_const[k]
-                    sy += val * cy_const[k]
-                rho[i,j] = s
-                if s > 1e-12:
-                    ux[i,j] = sx / s
-                    uy[i,j] = sy / s
-        return rho, ux, uy
+        compute_macro[self.griddim, self.blockdim](self.f, self.nx, self.ny,
+                                                    self.d_rho, self.d_ux, self.d_uy)
+        return self.d_rho.copy_to_host(), self.d_ux.copy_to_host(), self.d_uy.copy_to_host()
 
 def main():
     import time
