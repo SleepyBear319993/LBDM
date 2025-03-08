@@ -16,7 +16,7 @@ w_const  = tuple(DTYPE(w) for w in (4.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0,
 # CUDA kernel: Collision Step
 # Each lattice cell computes its density, velocity, and then relaxes toward equilibrium.
 #--------------------------------------------------------------------
-@cuda.jit
+@cuda.jit(fastmath=True)
 def collision_kernel(f, omega, nx, ny):
     i, j = cuda.grid(2)
     if i < nx and j < ny:
@@ -112,15 +112,15 @@ def moving_lid_kernel(f, nx, ny, U):
             j = ny - 2        # top row
             
             # Zou-He wet node velocity boundary condition
-            rho = f[i, j, 0] + f[i, j, 1] + f[i, j, 3] + 2.0 * (f[i, j, 2] + f[i, j, 5] + f[i, j, 6])
-            f[i, j, 4] = f[i, j, 2]
-            f[i, j, 7] = f[i, j, 5] + 0.5 * (f[i, j, 1] - f[i, j, 3]) - 0.5 * rho * U
-            f[i, j, 8] = f[i, j, 6] - 0.5 * (f[i, j, 1] - f[i, j, 3]) + 0.5 * rho * U
+            # rho = f[i, j, 0] + f[i, j, 1] + f[i, j, 3] + 2.0 * (f[i, j, 2] + f[i, j, 5] + f[i, j, 6])
+            # f[i, j, 4] = f[i, j, 2]
+            # f[i, j, 7] = f[i, j, 5] + 0.5 * (f[i, j, 1] - f[i, j, 3]) - 0.5 * rho * U
+            # f[i, j, 8] = f[i, j, 6] - 0.5 * (f[i, j, 1] - f[i, j, 3]) + 0.5 * rho * U
             
             # Ladd Link-based velocity boundary condition
-            # f[i, j, 4] = f[i, j, 2] 
-            # f[i, j, 7] = f[i, j, 5] - 1.0/6.0 * U
-            # f[i, j, 8] = f[i, j, 6] + 1.0/6.0 * U
+            f[i, j, 4] = f[i, j, 2] 
+            f[i, j, 7] = f[i, j, 5] - 1.0/6.0 * U
+            f[i, j, 8] = f[i, j, 6] + 1.0/6.0 * U
 
 class LBMSolverD2Q9GPU:
     def __init__(self, nx, ny, omega, U):
@@ -137,7 +137,7 @@ class LBMSolverD2Q9GPU:
         self.mask = cuda.device_array((nx, ny), dtype=np.int8)
 
         # Choose thread-block dimensions
-        self.blockdim = (8, 8)
+        self.blockdim = (16, 16)
         self.griddim = ((nx + self.blockdim[0] - 1)//self.blockdim[0],
                         (ny + self.blockdim[1] - 1)//self.blockdim[1])
         
@@ -199,12 +199,12 @@ class LBMSolverD2Q9GPU:
         # 1) Collision in-place on self.f
         collision_kernel[self.griddim, self.blockdim](self.f, self.omega,
                                                       self.nx, self.ny)
-        cuda.synchronize()
+        #cuda.synchronize()
 
         # 2) Streaming: f -> f_new
         streaming_kernel[self.griddim, self.blockdim](self.f, self.f_new,
                                                       self.nx, self.ny)
-        cuda.synchronize()
+        #cuda.synchronize()
         
         # 2) Streaming with periodic boundary conditions
         # streaming_kernel_periodic[self.griddim, self.blockdim](self.f, self.f_new,
@@ -214,11 +214,11 @@ class LBMSolverD2Q9GPU:
         # 3) Bounce-back on f_new
         bounce_back_kernel[self.griddim, self.blockdim](self.f_new, self.mask,
                                                         self.nx, self.ny)
-        cuda.synchronize()
+        #cuda.synchronize()
         
         # 4) Moving-lid boundary condition on top wall
         moving_lid_kernel[self.griddim, self.blockdim](self.f_new, self.nx, self.ny, self.U)
-        cuda.synchronize()
+        #cuda.synchronize()
 
         # 5) Swap
         self.f, self.f_new = self.f_new, self.f
@@ -273,10 +273,10 @@ class LBMSolverD2Q9GPU:
 def main():
     import time
 
-    nx, ny = 256, 256
+    nx, ny = 1024, 1024
     #omega = 0.56
-    U = 0.1
-    Re = 1000.0
+    U = 0.3
+    Re = 35000.0
     nu = 3.0 * (U * float(nx) / Re) + 0.5
     omega = 1.0 / nu
     solver = LBMSolverD2Q9GPU(nx, ny, omega, U)
