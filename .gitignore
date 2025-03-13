@@ -1,3 +1,4 @@
 # Ignore build and dist folders
 __pycache__/
 .vscode/
+bin/

@@ -1,15 +1,15 @@
-#include <stdio.h>
-#include <math.h>
 #include <chrono>
-#include <fstream>
 #include <iomanip>
 #include <string>
 #include <sstream>
 
+// ====== CUDA libraries ======
+#include "cuda_runtime.h"
+#include "device_launch_parameters.h"
+
 // ====== OpenGL / CUDA-OpenGL Interop ======
 #include <GL/glew.h>       // if using GLEW
 #include <GL/freeglut.h>   // if using freeGLUT
-#include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 
 // Time info
@@ -87,7 +87,7 @@ __global__ void collision_kernel(DTYPE* f, DTYPE omega, int nx, int ny) {
             u_x += val * cx_const[k];
             u_y += val * cy_const[k];
         }
-        if (rho > 0.0) {
+        if (rho > DTYPE(0.0)) {
             u_x /= rho;
             u_y /= rho;
         }
@@ -215,29 +215,6 @@ __global__ void compute_velocity_field_kernel(const DTYPE* f, DTYPE* velocity_ma
 // Kernel that copies the velocity magnitudes into RGBA
 // for display, writing directly into a CUDA-mapped buffer
 // (pbo) which has size (nx*ny*4 bytes).
-// We'll do a grayscale: R=G=B=255*vel/U, A=255.
-//-----------------------------------------------------
-//__global__ void fill_pbo_kernel(unsigned char* pbo_ptr,
-//    const DTYPE* velocity_mag,
-//    int nx, int ny,
-//    float U)
-//{
-//    int i = blockIdx.x * blockDim.x + threadIdx.x;
-//    int j = blockIdx.y * blockDim.y + threadIdx.y;
-//    if (i < nx && j < ny) {
-//        int idx_out = 4 * (i + j * nx); // RGBA
-//        float v = velocity_mag[i + j * nx];
-//
-//        // Optionally clamp or scale
-//        // float val = fminf(v / clampVal, 1.0f);  // scale velocity up to "clampVal"
-//        unsigned char c = (unsigned char)(v / U * 255.0f);
-//
-//        pbo_ptr[idx_out + 0] = c;  // R
-//        pbo_ptr[idx_out + 1] = c;  // G
-//        pbo_ptr[idx_out + 2] = c;  // B
-//        pbo_ptr[idx_out + 3] = 255;// A
-//    }
-//}
 
 // Blue to red color map
 __global__ void fill_pbo_kernel(unsigned char* pbo_ptr,
@@ -253,11 +230,6 @@ __global__ void fill_pbo_kernel(unsigned char* pbo_ptr,
 
         // Normalize velocity to [0, 1] based on U
         float t = fminf(v / float(U), 1.0f); // Clamp to [0, 1]
-
-        // Linear interpolation from blue (0, 0, 255) to red (255, 0, 0)
-        //unsigned char r = (unsigned char)(t * 255.0f);          // Red increases
-        //unsigned char g = 0;                                    // Green stays 0
-        //unsigned char b = (unsigned char)((1.0f - t) * 255.0f); // Blue decreases
 
         // Jet color bar (Blue to yellow to red color map)
         unsigned char r, g, b;
@@ -329,19 +301,19 @@ void simulation_step() {
     dim3 blockDim(16, 16);
     dim3 gridDim((nx + blockDim.x - 1) / blockDim.x, (ny + blockDim.y - 1) / blockDim.y);
 
-    collision_kernel <<<gridDim,blockDim>>> (d_f, omega, nx, ny);
+    collision_kernel <<<gridDim, blockDim>>> (d_f, omega, nx, ny);
     //cudaDeviceSynchronize();
 
-    streaming_kernel <<<gridDim,blockDim>>> (d_f, d_f_new, nx, ny);
+    streaming_kernel <<<gridDim, blockDim>>> (d_f, d_f_new, nx, ny);
     //cudaDeviceSynchronize();
 
-    bounce_back_kernel <<<gridDim,blockDim>>> (d_f_new, d_mask, nx, ny);
+    bounce_back_kernel <<<gridDim, blockDim>>> (d_f_new, d_mask, nx, ny);
     //cudaDeviceSynchronize();
 
     // Apply moving lid
     dim3 blockDim1(256);
     dim3 gridDim1((nx + blockDim1.x - 1) / blockDim1.x);
-    moving_lid_kernel <<<gridDim1,blockDim1>>> (d_f_new, nx, ny, U);
+    moving_lid_kernel <<<gridDim1, blockDim1>>> (d_f_new, nx, ny, U);
     //cudaDeviceSynchronize();
 
     // Swap pointers
@@ -419,7 +391,7 @@ void display() {
     // 2) Compute velocity magnitude on GPU
     dim3 block(16, 16);
     dim3 grid((nx + block.x - 1) / block.x, (ny + block.y - 1) / block.y);
-    compute_velocity_field_kernel << <grid, block >> > (d_f, d_velocity, nx, ny);
+    compute_velocity_field_kernel <<<grid, block>>> (d_f, d_velocity, nx, ny);
     cudaDeviceSynchronize();
 
     // 3) Map the PBO so we can write into it from CUDA
@@ -429,7 +401,7 @@ void display() {
     cudaGraphicsResourceGetMappedPointer((void**)&d_pbo_ptr, &num_bytes, cuda_pbo);
 
     // 4) Fill PBO with color from velocity
-    fill_pbo_kernel << <grid, block >> > (d_pbo_ptr, d_velocity, nx, ny, U);
+    fill_pbo_kernel <<<grid, block>>> (d_pbo_ptr, d_velocity, nx, ny, U);
     cudaDeviceSynchronize();
 
     // 5) Unmap
