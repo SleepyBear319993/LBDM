@@ -139,7 +139,7 @@ class LBMDiffusionSolver:
 
 def main():
     # Load the image
-    img = Image.open('girl.png')
+    img = Image.open('evangelion-OST.jpg')
     rgb_img = img.convert('RGB')
     rgb_values = np.array(rgb_img)
     
@@ -194,6 +194,68 @@ def main():
     # Save as separate images too
     Image.fromarray(result1).save(f"bin/diffused_{steps1}.png")
     Image.fromarray(result2).save(f"bin/diffused_{steps1+steps2}.png")
+    
+    # Plot histograms of original and final RGB values
+    plt.figure(figsize=(15, 10))
+    
+    # Channel names and colors for plotting
+    channels = ['Red', 'Green', 'Blue']
+    colors = ['red', 'green', 'blue']
+    
+    # Plot histograms for the original image
+    for i in range(3):
+        plt.subplot(2, 3, i+1)
+        plt.hist(rgb_values[:,:,i].flatten(), bins=256, range=(0,255), 
+                 color=colors[i], alpha=0.7)
+        plt.title(f"Original - {channels[i]} Channel")
+        plt.xlabel("Pixel Value")
+        plt.ylabel("Frequency")
+    
+    # Plot histograms for the final diffused image
+    for i in range(3):
+        plt.subplot(2, 3, i+4)
+        plt.hist(result2[:,:,i].flatten(), bins=256, range=(0,255), 
+                 color=colors[i], alpha=0.7)
+        plt.title(f"After {steps1+steps2} steps - {channels[i]} Channel")
+        plt.xlabel("Pixel Value")
+        plt.ylabel("Frequency")
+    
+    # After the histograms but before saving the figure
+    
+    # Calculate and display mean and variance statistics
+    print("\nRGB Channel Statistics:")
+    print("------------------------")
+    
+    # Calculate statistics for each channel
+    for i, channel in enumerate(channels):
+        # Original image statistics
+        original_values = rgb_values[:,:,i].flatten()
+        original_mean = np.mean(original_values)
+        original_var = np.var(original_values)
+        
+        # Final image statistics
+        final_values = result2[:,:,i].flatten()
+        final_mean = np.mean(final_values)
+        final_var = np.var(final_values)
+        
+        # Print statistics
+        print(f"{channel} Channel:")
+        print(f"  Original: Mean = {original_mean:.2f}, Variance = {original_var:.2f}")
+        print(f"  After {steps1+steps2} steps: Mean = {final_mean:.2f}, Variance = {final_var:.2f}")
+        print(f"  Change: Mean Δ = {final_mean - original_mean:.2f}, Variance Δ = {final_var - original_var:.2f}")
+        print()
+        
+        # Add text annotations to the histogram plots
+        plt.subplot(2, 3, i+1)
+        plt.text(0.05, 0.95, f"Mean: {original_mean:.1f}\nVar: {original_var:.1f}", 
+                 transform=plt.gca().transAxes, va='top', fontsize=9)
+        
+        plt.subplot(2, 3, i+4)
+        plt.text(0.05, 0.95, f"Mean: {final_mean:.1f}\nVar: {final_var:.1f}", 
+                 transform=plt.gca().transAxes, va='top', fontsize=9)
+    
+    plt.tight_layout()
+    plt.savefig("bin/rgb_histograms.png")
     
     print("Diffusion simulation completed and saved")
 
