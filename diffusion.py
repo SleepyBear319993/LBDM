@@ -152,15 +152,11 @@ def main():
     # Higher omega = faster diffusion
     omega = 0.1  # Value between 0 and 2, smaller is more diffusive
     
+    # Load and initialize the solver
     solver = LBMDiffusionSolver(nx, ny, omega)
     solver.initialize_from_image(rgb_values)
     
-    # Save original image
-    # plt.figure(figsize=(12, 8))
-    # plt.subplot(161)
-    # plt.imshow(rgb_values)
-    # plt.title("Original")
-    
+    # Run the diffusion simulation sum(checkpoint) steps
     checkpoint = [100, 100, 100]
     results = []
     plt.figure(figsize=(12, 8))
