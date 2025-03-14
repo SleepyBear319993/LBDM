@@ -139,7 +139,7 @@ class LBMDiffusionSolver:
 
 def main():
     # Load the image
-    img = Image.open('evangelion-OST.jpg')
+    img = Image.open('girl.png')
     rgb_img = img.convert('RGB')
     rgb_values = np.array(rgb_img)
     
@@ -156,44 +156,34 @@ def main():
     solver.initialize_from_image(rgb_values)
     
     # Save original image
+    # plt.figure(figsize=(12, 8))
+    # plt.subplot(161)
+    # plt.imshow(rgb_values)
+    # plt.title("Original")
+    
+    checkpoint = [100, 100, 100]
+    results = []
     plt.figure(figsize=(12, 8))
-    plt.subplot(131)
+    total_plots = len(checkpoint) + 1
+    plt.subplot(1, total_plots, 1)
     plt.imshow(rgb_values)
     plt.title("Original")
-    
-    # Run diffusion for different steps
-    steps1 = 50
-    t0 = time.time()
-    solver.run(steps1)
-    result1 = solver.get_result_image()
-    t1 = time.time()
-    print(f"Completed {steps1} steps in {t1-t0:.2f} seconds")
-    
-    steps2 = 10000  # 500 total
-    t0 = time.time()
-    solver.run(steps2)
-    result2 = solver.get_result_image()
-    t1 = time.time()
-    print(f"Completed {steps2} steps in {t1-t0:.2f} seconds")
-    
+    for step in checkpoint:
+        solver.run(step)
+        result = solver.get_result_image()
+        results.append(result)
     # Plot results
-    plt.subplot(132)
-    plt.imshow(result1)
-    plt.title(f"After {steps1} steps")
-    
-    plt.subplot(133)
-    plt.imshow(result2)
-    plt.title(f"After {steps1+steps2} steps")
- 
+    for i, result in enumerate(results):
+        plt.subplot(1, total_plots, i+2)
+        plt.imshow(result)
+        plt.title(f"After {sum(checkpoint[:i+1])} steps")
+    # Save the figure
     import os
     os.makedirs("bin", exist_ok=True)
-    
     plt.tight_layout()
     plt.savefig("bin/diffusion_result.png")
-    
-    # Save as separate images too
-    Image.fromarray(result1).save(f"bin/diffused_{steps1}.png")
-    Image.fromarray(result2).save(f"bin/diffused_{steps1+steps2}.png")
+    #plt.show()
+
     
     # Plot histograms of original and final RGB values
     plt.figure(figsize=(15, 10))
@@ -211,12 +201,13 @@ def main():
         plt.xlabel("Pixel Value")
         plt.ylabel("Frequency")
     
+    final = results[-1]
     # Plot histograms for the final diffused image
     for i in range(3):
         plt.subplot(2, 3, i+4)
-        plt.hist(result2[:,:,i].flatten(), bins=256, range=(0,255), 
+        plt.hist(final[:,:,i].flatten(), bins=256, range=(0,255), 
                  color=colors[i], alpha=0.7)
-        plt.title(f"After {steps1+steps2} steps - {channels[i]} Channel")
+        plt.title(f"After {sum(checkpoint)} steps - {channels[i]} Channel")
         plt.xlabel("Pixel Value")
         plt.ylabel("Frequency")
     
@@ -234,14 +225,14 @@ def main():
         original_var = np.var(original_values)
         
         # Final image statistics
-        final_values = result2[:,:,i].flatten()
+        final_values = final[:,:,i].flatten()
         final_mean = np.mean(final_values)
         final_var = np.var(final_values)
         
         # Print statistics
         print(f"{channel} Channel:")
         print(f"  Original: Mean = {original_mean:.2f}, Variance = {original_var:.2f}")
-        print(f"  After {steps1+steps2} steps: Mean = {final_mean:.2f}, Variance = {final_var:.2f}")
+        print(f"  After {sum(checkpoint)} steps: Mean = {final_mean:.2f}, Variance = {final_var:.2f}")
         print(f"  Change: Mean Δ = {final_mean - original_mean:.2f}, Variance Δ = {final_var - original_var:.2f}")
         print()
         
@@ -256,6 +247,7 @@ def main():
     
     plt.tight_layout()
     plt.savefig("bin/rgb_histograms.png")
+    #plt.show()
     
     print("Diffusion simulation completed and saved")
 
