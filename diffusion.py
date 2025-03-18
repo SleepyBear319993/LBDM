@@ -60,7 +60,7 @@ def init_from_image_kernel(image_data, f, channel, nx, ny):
     """Initialize distribution functions from image data for a specific channel directly on GPU"""
     i, j = cuda.grid(2)
     if i < nx and j < ny:
-        # Get normalized channel value (image data is in [j,i] format)
+        # Get normalized channel value (image data is in [j,i] suffix)
         density = float(image_data[j, i, channel])# / 255.0
         
         # Initialize distributions with equilibrium for zero velocity
@@ -145,8 +145,8 @@ class LBMDiffusionSolver:
 def main():
     # Load the image
     name = 'girl'
-    format = 'png'
-    img = Image.open(f'{name}.{format}')
+    suffix = 'png'
+    img = Image.open(f'{name}.{suffix}')
     #img = Image.open('girl.png')
     rgb_img = img.convert('RGB')
     rgb_values = np.array(rgb_img) / 255.0  # Normalize to [0, 1]
@@ -186,7 +186,7 @@ def main():
     import os
     os.makedirs("bin", exist_ok=True)
     plt.tight_layout()
-    plt.savefig(f"bin/diffusion_result_{total_steps}_{name}.{format}")
+    plt.savefig(f"bin/diffusion_result_{total_steps}_{name}.{suffix}")
     #plt.show()
 
     
@@ -251,7 +251,7 @@ def main():
                  transform=plt.gca().transAxes, va='top', fontsize=9)
     
     plt.tight_layout()
-    plt.savefig(f"bin/rgb_histograms_{total_steps}_{name}.{format}")
+    plt.savefig(f"bin/rgb_histograms_{total_steps}_{name}.{suffix}")
     #plt.show()
     
     print("Diffusion simulation completed and saved")

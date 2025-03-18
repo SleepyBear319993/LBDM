@@ -21,6 +21,9 @@ betas = np.linspace(beta_min, beta_max, num_steps)
 alphas = 1 - betas
 alpha_cumprod = np.cumprod(alphas)
 alpha_cumprod_t = alpha_cumprod[num_steps-1]  # Use the final timestep
+print(f"sqrt Alpha cumulative product: {np.sqrt(alpha_cumprod_t):.4f}")
+print(f"sqrt 1-alpha_cumprod: {np.sqrt(1 - alpha_cumprod_t):.4f}")
+print(f"1-alpha_cumprod: {1 - alpha_cumprod_t:.4f}")
 
 # Apply forward process in one step (equivalent to running all iterations)
 noise = np.random.randn(*img.shape)
