@@ -40,10 +40,13 @@ blockspergrid_y = (ny + threadsperblock[1] - 1) // threadsperblock[1]
 blockspergrid = (blockspergrid_x, blockspergrid_y)
 
 streaming_kernel_periodic[blockspergrid, threadsperblock](f_in_gpu, f_out_gpu, nx, ny)
+f_in_gpu, f_out_gpu = f_out_gpu, f_in_gpu
+streaming_kernel_periodic[blockspergrid, threadsperblock](f_in_gpu, f_out_gpu, nx, ny)
+streaming_kernel_periodic_reverse[blockspergrid, threadsperblock](f_out_gpu, f_out_gpu_reverse, nx, ny)
+f_out_gpu, f_out_gpu_reverse = f_out_gpu_reverse, f_out_gpu
 streaming_kernel_periodic_reverse[blockspergrid, threadsperblock](f_out_gpu, f_out_gpu_reverse, nx, ny)
 
 # copy the data back to the CPU
-f_out = f_out_gpu.copy_to_host()
 f_out_reverse = f_out_gpu_reverse.copy_to_host()
 
 # check if f_out_reverse after reversed streaming is equal to f_in
