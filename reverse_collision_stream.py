@@ -8,8 +8,9 @@ if __name__ == "__main__":
     # do collision streaming and reverse collision streaming
     nx, ny = 256, 256
     omega = 0.1
-    num_steps = 10
+    num_steps = 50
     # Use flat array instead of 3D array
+    np.random.seed(42)
     f_in = np.random.randn(nx*ny*9).astype(np.float32)  # Changed from (nx, ny, 9) to flat array
     f_in_gpu = cuda.to_device(f_in)
 
