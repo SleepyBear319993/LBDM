@@ -1,5 +1,5 @@
 from diffusion import diffusion_collision_kernel, streaming_kernel_periodic
-from reverse_collision import reverse_collision_kernel
+from reverse_collision import diffusion_collision_kernel_reverse
 from reverse_pull import streaming_kernel_periodic_reverse
 import numpy as np
 from numba import cuda
@@ -28,11 +28,11 @@ if __name__ == "__main__":
     for step in range(num_steps):
         streaming_kernel_periodic_reverse[blockspergrid, threadsperblock](f_in_gpu, f_out_gpu, nx, ny)
         f_in_gpu, f_out_gpu = f_out_gpu, f_in_gpu
-        reverse_collision_kernel[blockspergrid, threadsperblock](f_in_gpu, omega, nx, ny)
+        diffusion_collision_kernel_reverse[blockspergrid, threadsperblock](f_in_gpu, omega, nx, ny)
 
     f_out = f_in_gpu.copy_to_host()
     print(f"Original f_in: {f_in}")
-    print(f"Reversion f_out: {f_out}")
+    print(f"Diffusion reversed f_out: {f_out}")
     print(f"Arrays are exactly equal: {np.array_equal(f_in, f_out)}")
     rtol_value = 1e-4
     print(f"Arrays are approximately equal with relative tolerance {rtol_value}: {np.allclose(f_in, f_out, rtol=rtol_value)}")

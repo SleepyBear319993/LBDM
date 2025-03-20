@@ -3,7 +3,7 @@ import numpy as np
 from numba import cuda
 
 @cuda.jit(fastmath=True)
-def reverse_collision_kernel(fp, omega, nx, ny):
+def diffusion_collision_kernel_reverse(fp, omega, nx, ny):
     """Solution of solving collision equations for reverse diffusion"""
     i, j = cuda.grid(2)
     if i < nx and j < ny:
@@ -34,11 +34,11 @@ if __name__ == "__main__":
     for step in range(num_steps):
         diffusion_collision_kernel[blockspergrid, threadsperblock](f_in_gpu, omega, nx, ny)
     for step in range(num_steps):
-        reverse_collision_kernel[blockspergrid, threadsperblock](f_in_gpu, omega, nx, ny)
+        diffusion_collision_kernel_reverse[blockspergrid, threadsperblock](f_in_gpu, omega, nx, ny)
 
     f_out = f_in_gpu.copy_to_host()
     print(f"Original f_in: {f_in}")
-    print(f"Diffusion f_out: {f_out}")
+    print(f"Diffusion reversed f_out: {f_out}")
     print(f"Arrays are exactly equal: {np.array_equal(f_in, f_out)}")
     rtol_value = 1e-4
     print(f"Arrays are approximately equal with relative tolerance {rtol_value}: {np.allclose(f_in, f_out, rtol=rtol_value)}")
