@@ -148,7 +148,6 @@ def main():
     nx, ny = rgb_values.shape[1], rgb_values.shape[0]
     
     # Diffusion coefficient ~ (1/omega - 0.5)/3
-    # Higher omega = faster diffusion
     omega = 0.1  # Value between 0 and 2, smaller is more diffusive
     
     # Load and initialize the solver
@@ -193,7 +192,7 @@ def main():
     # Plot this as the starting point for reverse diffusion (second row, first column)
     plt.subplot(2, len(checkpoints)+1, len(checkpoints)+2)  # (Number of rows = 2, Number of columns, Position = Second row and first column)
     plt.imshow(np.clip(final_forward_result, 0, 1))
-    plt.title(f"Start Reversal: 0 step")
+    plt.title(f"Start Reversal")
     plt.axis('off')
 
     # Now run reverse diffusion
@@ -211,7 +210,8 @@ def main():
         else:
             # Intermediate steps: difference between consecutive checkpoints
             steps_to_run = reversed_checkpoints[i] - reversed_checkpoints[i+1]
-        print(f"Steps to run in reverse: {steps_to_run}")
+
+        # Run reverse diffusion
         solver.run_reverse(steps_to_run)
         
         # Get and save result
@@ -250,7 +250,7 @@ def main():
     
     plt.suptitle(f"Diffusion and Reversal Process\nMSE: {mse:.6f}, PSNR: {psnr:.2f} dB")
     plt.tight_layout()
-    plt.savefig(f"bin/diffusion_reversal_{image_name}.{suffix}")
+    plt.savefig(f"bin/diffusion_reversal_{checkpoints[-1]}_{image_name}.{suffix}")
     plt.show()
 
 if __name__ == "__main__":

@@ -146,7 +146,6 @@ def main():
     nx, ny = rgb_values.shape[1], rgb_values.shape[0]
     
     # Diffusion coefficient ~ (1/omega - 0.5)/3
-    # Higher omega = faster diffusion
     omega = 0.1  # Value between 0 and 2, smaller is more diffusive
     
     # Load and initialize the solver
