@@ -1,6 +1,5 @@
 from PIL import Image
 import numpy as np
-import time
 import matplotlib.pyplot as plt
 import warnings
 from numba import cuda
@@ -9,8 +8,8 @@ from numba import cuda
 warnings.filterwarnings("ignore", category=UserWarning)
 
 # Use constants and helper functions from kernel_gpu.py
-from kernel_gpu import DTYPE, cx_const, cy_const, w_const
-from diffusion import idx, diffusion_collision_kernel, streaming_kernel_periodic, compute_density_kernel, init_from_image_kernel
+from kernel_gpu import DTYPE
+from diffusion import diffusion_collision_kernel, streaming_kernel_periodic, compute_density_kernel, init_from_image_kernel
 from reverse_collision import diffusion_collision_kernel_reverse
 from reverse_pull import streaming_kernel_periodic_reverse
 
@@ -157,7 +156,6 @@ def main():
     solver.initialize_from_image(rgb_values)
     
     # Define checkpoints for visualization
-    forward_steps = 100
     checkpoints = [10, 25, 50, 100]  # Points at which to visualize
     
     # Create figure for visualization
@@ -184,11 +182,20 @@ def main():
         results.append(result)
         
         # Plot the result
-        plt.subplot(2, len(checkpoints)+1, i+2)
+        plt.subplot(2, len(checkpoints)+1, i+2) # (Number of rows = 2, Number of columns, Position)
         plt.imshow(np.clip(result, 0, 1))
         plt.title(f"Forward: {step} steps")
         plt.axis('off')
     
+    # Get the final forward diffusion result (should be the same as results[-1])
+    final_forward_result = solver.get_result_image()
+
+    # Plot this as the starting point for reverse diffusion (second row, first column)
+    plt.subplot(2, len(checkpoints)+1, len(checkpoints)+2)  # (Number of rows = 2, Number of columns, Position = Second row and first column)
+    plt.imshow(np.clip(final_forward_result, 0, 1))
+    plt.title(f"Start Reversal: 0 step")
+    plt.axis('off')
+
     # Now run reverse diffusion
     reverse_results = []
     reversed_checkpoints = list(reversed(checkpoints))
@@ -204,7 +211,7 @@ def main():
         else:
             # Intermediate steps: difference between consecutive checkpoints
             steps_to_run = reversed_checkpoints[i] - reversed_checkpoints[i+1]
-        
+        print(f"Steps to run in reverse: {steps_to_run}")
         solver.run_reverse(steps_to_run)
         
         # Get and save result
@@ -212,17 +219,15 @@ def main():
         reverse_results.append(result)
         
         # Plot the result
-        plt.subplot(2, len(checkpoints)+1, len(checkpoints)+2+i)
+        plt.subplot(2, len(checkpoints)+1, len(checkpoints)+3+i)  # (Number of rows = 2, Number of columns, Position starting from second row and second column)
         plt.imshow(np.clip(result, 0, 1))
-        plt.title(f"Reverse: {steps_to_run} steps")
+        if i == len(reversed_checkpoints) - 1:
+            plt.title(f"Reverse: {steps_to_run} steps (Final)")
+        else:
+            plt.title(f"Reverse: {steps_to_run} steps")
         plt.axis('off')
     
-    # Plot final comparison
-    plt.subplot(2, len(checkpoints)+1, 2*(len(checkpoints)+1))
     final_result = reverse_results[-1]
-    plt.imshow(np.clip(final_result, 0, 1))
-    plt.title("Final (After Reversal)")
-    plt.axis('off')
     
     # Calculate error metrics
     error_metrics = solver.calculate_error_metrics()

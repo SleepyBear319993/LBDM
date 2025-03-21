@@ -130,17 +130,6 @@ class LBMDiffusionSolver:
         b = self.density[2].copy_to_host()
         rgb = np.stack((r, g, b), axis=-1)
         return rgb
-        
-        # Scale back to [0,255]
-        #rgb = np.zeros((self.ny, self.nx, 3), dtype=np.uint8)
-        # rgb[:,:,0] = np.clip(r * 255, 0, 255).astype(np.uint8)
-        # rgb[:,:,1] = np.clip(g * 255, 0, 255).astype(np.uint8)
-        # rgb[:,:,2] = np.clip(b * 255, 0, 255).astype(np.uint8)
-        #rgb[:,:,0] = r.astype(np.uint8)
-        #rgb[:,:,1] = g.astype(np.uint8)
-        #rgb[:,:,2] = b.astype(np.uint8)
-        
-        #return self.density
 
 def main():
     # Load the image
@@ -163,31 +152,44 @@ def main():
     # Load and initialize the solver
     solver = LBMDiffusionSolver(nx, ny, omega)
     solver.initialize_from_image(rgb_values)
+
+    # Define checkpoints for visualization
+    checkpoints = [100, 200, 300]  # Points at which to visualize
     
-    # Run the diffusion simulation sum(checkpoint) steps
-    checkpoint = [1000, 1000, 1000]
-    results = []
-    total_plots = len(checkpoint) + 1
-    total_steps = sum(checkpoint)
+    # Create figure for visualization
     plt.figure(figsize=(12, 8))
-    plt.subplot(1, total_plots, 1)
+    
+    # Plot original image
+    plt.subplot(1, len(checkpoints)+1, 1)
     plt.imshow(rgb_values)
     plt.title("Original")
-    for step in checkpoint:
-        solver.run(step)
+    plt.axis('off')
+    
+    # Run forward diffusion with checkpoints
+    results = []
+    current_step = 0
+    
+    for i, step in enumerate(checkpoints):
+        # Run diffusion until this checkpoint
+        steps_to_run = step - current_step
+        solver.run(steps_to_run)
+        current_step = step
+        
+        # Get and save result
         result = solver.get_result_image()
         results.append(result)
-    # Plot results
-    for i, result in enumerate(results):
-        plt.subplot(1, total_plots, i+2)
-        plt.imshow(result)
-        plt.title(f"After {sum(checkpoint[:i+1])} steps")
+        
+        # Plot the result
+        plt.subplot(1, len(checkpoints)+1, i+2) # (Number of rows = 1, Number of columns, Position)
+        plt.imshow(np.clip(result, 0, 1))
+        plt.title(f"Forward: {step} steps")
+        plt.axis('off')
     # Save the figure
     import os
     os.makedirs("bin", exist_ok=True)
     plt.tight_layout()
-    plt.savefig(f"bin/diffusion_result_{total_steps}_{name}.{suffix}")
-    #plt.show()
+    plt.savefig(f"bin/diffusion_result_{checkpoints[-1]}_{name}.{suffix}")
+    plt.show()
 
     
     # Plot histograms of original and final RGB values
@@ -212,7 +214,7 @@ def main():
         plt.subplot(2, 3, i+4)
         plt.hist(final[:,:,i].flatten(), bins=256, range=(0,1), 
                  color=colors[i], alpha=0.7)
-        plt.title(f"After {sum(checkpoint)} steps - {channels[i]} Channel")
+        plt.title(f"After {checkpoints[-1]} steps - {channels[i]} Channel")
         plt.xlabel("Pixel Value")
         plt.ylabel("Frequency")
     
@@ -237,7 +239,7 @@ def main():
         # Print statistics
         print(f"{channel} Channel:")
         print(f"  Original: Mean = {original_mean:.4f}, Variance = {original_var:.4f}")
-        print(f"  After {sum(checkpoint)} steps: Mean = {final_mean:.4f}, Variance = {final_var:.4f}")
+        print(f"  After {checkpoints[-1]} steps: Mean = {final_mean:.4f}, Variance = {final_var:.4f}")
         print(f"  Change: Mean Δ = {final_mean - original_mean:.4f}, Variance Δ = {final_var - original_var:.4f}")
         print()
         
@@ -251,7 +253,7 @@ def main():
                  transform=plt.gca().transAxes, va='top', fontsize=9)
     
     plt.tight_layout()
-    plt.savefig(f"bin/rgb_histograms_{total_steps}_{name}.{suffix}")
+    plt.savefig(f"bin/rgb_histograms_{checkpoints[-1]}_{name}.{suffix}")
     #plt.show()
     
     print("Diffusion simulation completed and saved")
