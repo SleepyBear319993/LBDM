@@ -191,10 +191,20 @@ def main():
     
     # Now run reverse diffusion
     reverse_results = []
-    
-    for i, step in enumerate(reversed(checkpoints)):
-        # Run reverse diffusion for this checkpoint
-        steps_to_run = step if i == 0 else checkpoints[len(checkpoints)-i] - checkpoints[len(checkpoints)-i-1]
+    reversed_checkpoints = list(reversed(checkpoints))
+
+    for i in range(len(reversed_checkpoints)):
+        # Calculate the correct number of steps to run in reverse
+        if i == 0:
+            # First reverse step: from last checkpoint to the one before
+            steps_to_run = reversed_checkpoints[0] - reversed_checkpoints[1] if len(reversed_checkpoints) > 1 else reversed_checkpoints[0]
+        elif i == len(reversed_checkpoints) - 1:
+            # Last reverse step: from first checkpoint back to 0
+            steps_to_run = reversed_checkpoints[-1]
+        else:
+            # Intermediate steps: difference between consecutive checkpoints
+            steps_to_run = reversed_checkpoints[i] - reversed_checkpoints[i+1]
+        
         solver.run_reverse(steps_to_run)
         
         # Get and save result
@@ -204,7 +214,7 @@ def main():
         # Plot the result
         plt.subplot(2, len(checkpoints)+1, len(checkpoints)+2+i)
         plt.imshow(np.clip(result, 0, 1))
-        plt.title(f"Reverse: {sum(checkpoints) - (0 if i == 0 else checkpoints[len(checkpoints)-i])} steps")
+        plt.title(f"Reverse: {steps_to_run} steps")
         plt.axis('off')
     
     # Plot final comparison
@@ -235,7 +245,7 @@ def main():
     
     plt.suptitle(f"Diffusion and Reversal Process\nMSE: {mse:.6f}, PSNR: {psnr:.2f} dB")
     plt.tight_layout()
-    plt.savefig(f"diffusion_reversal_{image_name}.png")
+    plt.savefig(f"bin/diffusion_reversal_{image_name}.{suffix}")
     plt.show()
 
 if __name__ == "__main__":
