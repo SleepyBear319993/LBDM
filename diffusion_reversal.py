@@ -1,12 +1,8 @@
 from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
-import warnings
 from numba import cuda
 import os
-
-# Suppress CUDA performance warnings
-warnings.filterwarnings("ignore", category=UserWarning)
 
 # Use constants and helper functions from kernel_gpu.py
 from kernel_gpu import DTYPE
@@ -239,7 +235,7 @@ def main():
     # Plot this as the starting point for reverse diffusion (second row, first column)
     plt.subplot(2, len(checkpoints)+1, len(checkpoints)+2)  # (Number of rows = 2, Number of columns, Position = Second row and first column)
     plt.imshow(np.clip(final_forward_result, 0, 1))
-    plt.title(f"Start Reversal")
+    plt.title(f"Start Reversal: {checkpoints[-1]} steps")
     plt.axis('off')
 
     # Now run reverse diffusion
@@ -269,9 +265,9 @@ def main():
         plt.subplot(2, len(checkpoints)+1, len(checkpoints)+3+i)  # (Number of rows = 2, Number of columns, Position starting from second row and second column)
         plt.imshow(np.clip(result, 0, 1))
         if i == len(reversed_checkpoints) - 1:
-            plt.title(f"Reverse: {steps_to_run} steps (Final)")
+            plt.title(f"Reverse: 0 step (Final)")
         else:
-            plt.title(f"Reverse: {steps_to_run} steps")
+            plt.title(f"Reverse: {reversed_checkpoints[i+1]} steps")
         plt.axis('off')
     
     final_result = reverse_results[-1]
