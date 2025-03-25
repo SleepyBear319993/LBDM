@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import warnings
 from numba import cuda
+import os
 
 # Suppress CUDA performance warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -125,6 +126,52 @@ class LBMDiffusionReversalSolver:
         
         return error_metrics
 
+def plot_histograms(original, diffused, reversed_img, image_name, checkpoint):
+    """
+    Plot histograms of pixel intensity values for original, diffused and reversed images
+    with mean and variance statistics
+    """
+    plt.figure(figsize=(15, 10))
+    channels = ['Red', 'Green', 'Blue']
+    colors = ['red', 'green', 'blue']
+    
+    for i, (channel, color) in enumerate(zip(channels, colors)):
+        plt.subplot(3, 1, i+1)
+        
+        # Get flattened channel data
+        orig_data = original[:,:,i].flatten()
+        diff_data = diffused[:,:,i].flatten()
+        rev_data = reversed_img[:,:,i].flatten()
+        
+        # Calculate statistics
+        orig_mean, orig_var = np.mean(orig_data), np.var(orig_data)
+        diff_mean, diff_var = np.mean(diff_data), np.var(diff_data)
+        rev_mean, rev_var = np.mean(rev_data), np.var(rev_data)
+        
+        # Calculate histograms for this channel
+        hist_orig, bins = np.histogram(orig_data, bins=50, range=(0, 1))
+        hist_diff, _ = np.histogram(diff_data, bins=bins)
+        hist_rev, _ = np.histogram(rev_data, bins=bins)
+        
+        # Plot histograms
+        bin_centers = 0.5 * (bins[:-1] + bins[1:])
+        plt.plot(bin_centers, hist_orig, alpha=0.7, color=color, linestyle='-', 
+                 linewidth=2, label=f'Original (μ={orig_mean:.4f}, σ²={orig_var:.4f})')
+        plt.plot(bin_centers, hist_diff, alpha=0.7, color='black', linestyle='--', 
+                 linewidth=2, label=f'After Diffusion (μ={diff_mean:.4f}, σ²={diff_var:.4f})')
+        plt.plot(bin_centers, hist_rev, alpha=0.7, color='orange', linestyle=':', 
+                 linewidth=2, label=f'After Reversal (μ={rev_mean:.4f}, σ²={rev_var:.4f})')
+     
+        plt.title(f'{channel} Channel')
+        plt.xlabel('Pixel Value')
+        plt.ylabel('Frequency')
+        plt.legend()
+        plt.grid(alpha=0.3)
+    
+    plt.suptitle(f'RGB Histograms Comparison - {checkpoint} Steps', fontsize=16)
+    plt.tight_layout()
+    plt.savefig(f"bin/histograms_{image_name}_{checkpoint}.png", dpi=300, bbox_inches='tight')
+
 def main():
     # Load the image
     image_name = 'girl'
@@ -155,7 +202,7 @@ def main():
     solver.initialize_from_image(rgb_values)
     
     # Define checkpoints for visualization
-    checkpoints = [10, 25, 50, 100]  # Points at which to visualize
+    checkpoints = [50, 100, 125, 150]  # Points at which to visualize
     
     # Create figure for visualization
     plt.figure(figsize=(15, 10))
@@ -250,8 +297,16 @@ def main():
     
     plt.suptitle(f"Diffusion and Reversal Process\nMSE: {mse:.6f}, PSNR: {psnr:.2f} dB")
     plt.tight_layout()
+    os.makedirs("bin", exist_ok=True)
     plt.savefig(f"bin/diffusion_reversal_{checkpoints[-1]}_{image_name}.{suffix}")
     plt.show()
+    
+    # Get the final forward diffusion and reversal results
+    final_forward_result = results[-1]  # Last result from forward diffusion
+    final_result = reverse_results[-1]  # Last result from reversal process
+
+    # Plot histograms comparing all three stages
+    plot_histograms(rgb_values, final_forward_result, final_result, image_name, checkpoints[-1])
 
 if __name__ == "__main__":
     # Ensure necessary imports
