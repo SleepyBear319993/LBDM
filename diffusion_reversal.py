@@ -152,11 +152,11 @@ def plot_histograms(original, diffused, reversed_img, image_name, checkpoint):
         # Plot histograms
         bin_centers = 0.5 * (bins[:-1] + bins[1:])
         plt.plot(bin_centers, hist_orig, alpha=0.7, color=color, linestyle='-', 
-                 linewidth=2, label=f'Original (μ={orig_mean:.4f}, σ²={orig_var:.4f})')
+                 linewidth=2, label=f'Original (μ={orig_mean:.8f}, σ²={orig_var:.8f})')
         plt.plot(bin_centers, hist_diff, alpha=0.7, color='black', linestyle='--', 
-                 linewidth=2, label=f'After Diffusion (μ={diff_mean:.4f}, σ²={diff_var:.4f})')
+                 linewidth=2, label=f'After Diffusion (μ={diff_mean:.8f}, σ²={diff_var:.8f})')
         plt.plot(bin_centers, hist_rev, alpha=0.7, color='orange', linestyle=':', 
-                 linewidth=2, label=f'After Reversal (μ={rev_mean:.4f}, σ²={rev_var:.4f})')
+                 linewidth=2, label=f'After Reversal (μ={rev_mean:.8f}, σ²={rev_var:.8f})')
      
         plt.title(f'{channel} Channel')
         plt.xlabel('Pixel Value')
@@ -207,7 +207,7 @@ def analyze_distribution_functions(f_data, nx, ny, channel_idx=0, stage_name="",
         hist, bins = np.histogram(f_k_flat, bins=50)
         bin_centers = 0.5 * (bins[:-1] + bins[1:])
         plt.plot(bin_centers, hist)
-        plt.title(f'f{k} (μ={mean_val:.6f}, σ²={var_val:.6f})')
+        plt.title(f'f{k} (μ={mean_val:.8f}, σ²={var_val:.8f})')
         plt.xlabel('Value')
         plt.ylabel('Frequency')
         plt.grid(alpha=0.3)
@@ -355,7 +355,7 @@ def main():
     mse = np.mean((rgb_values - final_result)**2)
     psnr = 10 * np.log10(1.0 / mse) if mse > 0 else float('inf')
     
-    plt.suptitle(f"Diffusion and Reversal Process\nMSE: {mse:.6f}, PSNR: {psnr:.2f} dB")
+    plt.suptitle(f"Diffusion and Reversal Process\nMSE: {mse:.8f}, PSNR: {psnr:.2f} dB")
     plt.tight_layout()
     os.makedirs("bin", exist_ok=True)
     plt.savefig(f"bin/diffusion_reversal_{checkpoints[-1]}_{image_name}.{suffix}")
