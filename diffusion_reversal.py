@@ -6,7 +6,7 @@ import os
 
 # Use constants and helper functions from kernel_gpu.py
 from kernel_gpu import DTYPE
-from diffusion import diffusion_collision_kernel, streaming_kernel_periodic, compute_density_kernel, init_from_image_kernel
+from diffusion import diffusion_collision_kernel, streaming_kernel_periodic, compute_density_kernel, init_from_image_kernel, idx_host
 from reverse_collision import diffusion_collision_kernel_reverse
 from reverse_pull import streaming_kernel_periodic_reverse
 
@@ -168,9 +168,64 @@ def plot_histograms(original, diffused, reversed_img, image_name, checkpoint):
     plt.tight_layout()
     plt.savefig(f"bin/histograms_{image_name}_{checkpoint}.png", dpi=300, bbox_inches='tight')
 
+def analyze_distribution_functions(f_data, nx, ny, channel_idx=0, stage_name="", save_prefix=""):
+    """
+    Analyze the distribution functions (f0-f8) from saved data
+    
+    Parameters:
+    - f_data: The flattened distribution functions array (already copied to host)
+    - nx, ny: Grid dimensions
+    - channel_idx: Which RGB channel this is (0=Red, 1=Green, 2=Blue)
+    - stage_name: Name of the current stage for labeling
+    - save_prefix: Prefix for saving plots
+    """
+    # Statistics storage
+    stats = []
+    
+    # Create figure for histograms
+    plt.figure(figsize=(15, 12))
+    
+    # For each distribution function
+    for k in range(9):
+        # Extract this distribution function across the grid
+        f_k = np.zeros((ny, nx))
+        for j in range(ny):
+            for i in range(nx):
+                idx_value = idx_host(i, j, k, nx, ny)
+                f_k[j, i] = f_data[idx_value]
+        
+        # Flatten for histogram
+        f_k_flat = f_k.flatten()
+        
+        # Calculate statistics
+        mean_val = np.mean(f_k_flat)
+        var_val = np.var(f_k_flat)
+        stats.append((mean_val, var_val))
+        
+        # Plot histogram
+        plt.subplot(3, 3, k+1)
+        hist, bins = np.histogram(f_k_flat, bins=50)
+        bin_centers = 0.5 * (bins[:-1] + bins[1:])
+        plt.plot(bin_centers, hist)
+        plt.title(f'f{k} (μ={mean_val:.6f}, σ²={var_val:.6f})')
+        plt.xlabel('Value')
+        plt.ylabel('Frequency')
+        plt.grid(alpha=0.3)
+    
+    # Finish plot and save
+    plt.suptitle(f'Distribution Functions Analysis - {stage_name}\n'
+                 f'Channel: {["Red", "Green", "Blue"][channel_idx]}', fontsize=16)
+    plt.tight_layout()
+    
+    if save_prefix:
+        os.makedirs("bin", exist_ok=True)
+        plt.savefig(f"bin/{save_prefix}_f_analysis_{channel_idx}.png", dpi=300, bbox_inches='tight')
+    
+    return stats
+
 def main():
     # Load the image
-    image_name = 'girl'
+    image_name = 'img165'
     suffix = 'png'
     try:
         img = Image.open(f'{image_name}.{suffix}')
@@ -196,9 +251,12 @@ def main():
     # Load and initialize the solver
     solver = LBMDiffusionReversalSolver(nx, ny, omega)
     solver.initialize_from_image(rgb_values)
+
+    # Save distribution functions for analysis
+    f_initial_red = solver.f[0].copy_to_host()
     
     # Define checkpoints for visualization
-    checkpoints = [50, 100, 125, 150]  # Points at which to visualize
+    checkpoints = [10, 50, 100, 150]  # Points at which to visualize
     
     # Create figure for visualization
     plt.figure(figsize=(15, 10))
@@ -231,6 +289,9 @@ def main():
     
     # Get the final forward diffusion result (should be the same as results[-1])
     final_forward_result = solver.get_result_image()
+
+    # Get distribution functions after forward diffusion
+    forward_complete_red = solver.f[0].copy_to_host()
 
     # Plot this as the starting point for reverse diffusion (second row, first column)
     plt.subplot(2, len(checkpoints)+1, len(checkpoints)+2)  # (Number of rows = 2, Number of columns, Position = Second row and first column)
@@ -271,6 +332,9 @@ def main():
         plt.axis('off')
     
     final_result = reverse_results[-1]
+
+    # Save distribution functions for analysis
+    reversed_complete_red = solver.f[0].copy_to_host()
     
     # Calculate error metrics
     error_metrics = solver.calculate_error_metrics()
@@ -303,6 +367,29 @@ def main():
 
     # Plot histograms comparing all three stages
     plot_histograms(rgb_values, final_forward_result, final_result, image_name, checkpoints[-1])
+
+    # Analyze distribution functions after diffusion
+    print("\nAnalyzing distribution functions...")
+    analyze_distribution_functions(
+        f_initial_red, nx, ny,
+        channel_idx=0, 
+        stage_name="Initial State", 
+        save_prefix=f"{image_name}_initial"
+    )
+
+    analyze_distribution_functions(
+        forward_complete_red, nx, ny,
+        channel_idx=0, 
+        stage_name=f"After {checkpoints[-1]} Diffusion Steps", 
+        save_prefix=f"{image_name}_diffused_{checkpoints[-1]}"
+    )
+
+    analyze_distribution_functions(
+        reversed_complete_red, nx, ny,
+        channel_idx=0, 
+        stage_name="After Complete Reversal", 
+        save_prefix=f"{image_name}_reversed_{checkpoints[-1]}"
+    )
 
 if __name__ == "__main__":
     # Ensure necessary imports
