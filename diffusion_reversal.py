@@ -155,7 +155,7 @@ def plot_histograms(original, diffused, reversed_img, image_name, checkpoint):
                  linewidth=2, label=f'Original (μ={orig_mean:.8f}, σ²={orig_var:.8f})')
         plt.plot(bin_centers, hist_diff, alpha=0.7, color='black', linestyle='--', 
                  linewidth=2, label=f'After Diffusion (μ={diff_mean:.8f}, σ²={diff_var:.8f})')
-        plt.plot(bin_centers, hist_rev, alpha=0.7, color='orange', linestyle=':', 
+        plt.plot(bin_centers, hist_rev, alpha=0.7, color='purple', linestyle=':', 
                  linewidth=2, label=f'After Reversal (μ={rev_mean:.8f}, σ²={rev_var:.8f})')
      
         plt.title(f'{channel} Channel')
