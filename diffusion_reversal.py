@@ -325,7 +325,7 @@ def main():
         # Plot the result
         plt.subplot(2, len(checkpoints)+1, len(checkpoints)+3+i)  # (Number of rows = 2, Number of columns, Position starting from second row and second column)
         plt.imshow(np.clip(result, 0, 1))
-        #plt.imshow(result)
+        
         if i == len(reversed_checkpoints) - 1:
             plt.title(f"Reverse: 0 step (Final)")
         else:
