@@ -225,10 +225,10 @@ def analyze_distribution_functions(f_data, nx, ny, channel_idx=0, stage_name="",
 
 def main():
     # Load the image
-    image_name = 'img165'
-    suffix = 'png'
+    image_name = 'tiger'
+    suffix = 'jpg'
     try:
-        img = Image.open(f'{image_name}.{suffix}')
+        img = Image.open(f'assets/{image_name}.{suffix}')
     except:
         print(f"Image {image_name}.{suffix} not found. Using a simple test image.")
         # Create a simple test image if the specified image is not found
@@ -256,7 +256,7 @@ def main():
     f_initial_red = solver.f[0].copy_to_host()
     
     # Define checkpoints for visualization
-    checkpoints = [10, 50, 100, 150]  # Points at which to visualize
+    checkpoints = [10, 50, 75]  # Points at which to visualize
     
     # Create figure for visualization
     plt.figure(figsize=(15, 10))
@@ -325,6 +325,7 @@ def main():
         # Plot the result
         plt.subplot(2, len(checkpoints)+1, len(checkpoints)+3+i)  # (Number of rows = 2, Number of columns, Position starting from second row and second column)
         plt.imshow(np.clip(result, 0, 1))
+        #plt.imshow(result)
         if i == len(reversed_checkpoints) - 1:
             plt.title(f"Reverse: 0 step (Final)")
         else:
@@ -362,8 +363,12 @@ def main():
     plt.show()
     
     # Get the final forward diffusion and reversal results
-    final_forward_result = results[-1]  # Last result from forward diffusion
-    final_result = reverse_results[-1]  # Last result from reversal process
+    #final_forward_result = results[-1]  # Last result from forward diffusion
+    #final_result = reverse_results[-1]  # Last result from reversal process
+
+    # Save the final images
+    Image.fromarray((final_forward_result * 255).astype(np.uint8)).save(f"bin/final_forward_{checkpoints[-1]}_{image_name}.{suffix}")
+    Image.fromarray((final_result * 255).astype(np.uint8)).save(f"bin/final_reversed_{checkpoints[-1]}_{image_name}.{suffix}")
 
     # Plot histograms comparing all three stages
     plot_histograms(rgb_values, final_forward_result, final_result, image_name, checkpoints[-1])

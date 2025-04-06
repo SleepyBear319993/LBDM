@@ -135,7 +135,7 @@ def main():
     # Load the image
     name = 'girl'
     suffix = 'png'
-    img = Image.open(f'{name}.{suffix}')
+    img = Image.open(f'assets/{name}.{suffix}')
     #img = Image.open('girl.png')
     rgb_img = img.convert('RGB')
     rgb_values = np.array(rgb_img) / 255.0  # Normalize to [0, 1]
