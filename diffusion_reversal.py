@@ -122,7 +122,7 @@ class LBMDiffusionReversalSolver:
         
         return error_metrics
 
-def plot_histograms(original, diffused, reversed_img, image_name, checkpoint):
+def plot_histograms(original, diffused, reversed_img, image_name, checkpoint, omega):
     """
     Plot histograms of pixel intensity values for original, diffused and reversed images
     with mean and variance statistics
@@ -166,7 +166,7 @@ def plot_histograms(original, diffused, reversed_img, image_name, checkpoint):
     
     plt.suptitle(f'RGB Histograms Comparison - {checkpoint} Steps', fontsize=16)
     plt.tight_layout()
-    plt.savefig(f"bin/histograms_{image_name}_{checkpoint}.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"bin/histograms_{image_name}_{checkpoint}_{omega}.png", dpi=300, bbox_inches='tight')
 
 def analyze_distribution_functions(f_data, nx, ny, channel_idx=0, stage_name="", save_prefix=""):
     """
@@ -225,8 +225,8 @@ def analyze_distribution_functions(f_data, nx, ny, channel_idx=0, stage_name="",
 
 def main():
     # Load the image
-    image_name = 'tiger'
-    suffix = 'jpg'
+    image_name = 'girl'
+    suffix = 'png'
     try:
         img = Image.open(f'assets/{image_name}.{suffix}')
     except:
@@ -246,7 +246,7 @@ def main():
     nx, ny = rgb_values.shape[1], rgb_values.shape[0]
     
     # Diffusion coefficient ~ (1/omega - 0.5)/3
-    omega = 0.1  # Value between 0 and 2, smaller is more diffusive
+    omega = 0.01  # Value between 0 and 2, smaller is more diffusive
     
     # Load and initialize the solver
     solver = LBMDiffusionReversalSolver(nx, ny, omega)
@@ -256,7 +256,7 @@ def main():
     f_initial_red = solver.f[0].copy_to_host()
     
     # Define checkpoints for visualization
-    checkpoints = [10, 50, 75]  # Points at which to visualize
+    checkpoints = [200, 800, 1200]  # Points at which to visualize
     
     # Create figure for visualization
     plt.figure(figsize=(15, 10))
@@ -359,7 +359,7 @@ def main():
     plt.suptitle(f"Diffusion and Reversal Process\nMSE: {mse:.8f}, PSNR: {psnr:.2f} dB")
     plt.tight_layout()
     os.makedirs("bin", exist_ok=True)
-    plt.savefig(f"bin/diffusion_reversal_{checkpoints[-1]}_{image_name}.{suffix}")
+    plt.savefig(f"bin/diffusion_reversal_{checkpoints[-1]}_{image_name}_{omega}.{suffix}")
     plt.show()
     
     # Get the final forward diffusion and reversal results
@@ -367,11 +367,11 @@ def main():
     #final_result = reverse_results[-1]  # Last result from reversal process
 
     # Save the final images
-    Image.fromarray((final_forward_result * 255).astype(np.uint8)).save(f"bin/final_forward_{checkpoints[-1]}_{image_name}.{suffix}")
-    Image.fromarray((final_result * 255).astype(np.uint8)).save(f"bin/final_reversed_{checkpoints[-1]}_{image_name}.{suffix}")
+    Image.fromarray((final_forward_result * 255).astype(np.uint8)).save(f"bin/final_forward_{checkpoints[-1]}_{image_name}_{omega}.{suffix}")
+    Image.fromarray((final_result * 255).astype(np.uint8)).save(f"bin/final_reversed_{checkpoints[-1]}_{image_name}_{omega}.{suffix}")
 
     # Plot histograms comparing all three stages
-    plot_histograms(rgb_values, final_forward_result, final_result, image_name, checkpoints[-1])
+    plot_histograms(rgb_values, final_forward_result, final_result, image_name, checkpoints[-1], omega)
 
     # Analyze distribution functions after diffusion
     print("\nAnalyzing distribution functions...")
@@ -386,14 +386,14 @@ def main():
         forward_complete_red, nx, ny,
         channel_idx=0, 
         stage_name=f"After {checkpoints[-1]} Diffusion Steps", 
-        save_prefix=f"{image_name}_diffused_{checkpoints[-1]}"
+        save_prefix=f"{image_name}_diffused_{checkpoints[-1]}_{omega}"
     )
 
     analyze_distribution_functions(
         reversed_complete_red, nx, ny,
         channel_idx=0, 
         stage_name="After Complete Reversal", 
-        save_prefix=f"{image_name}_reversed_{checkpoints[-1]}"
+        save_prefix=f"{image_name}_reversed_{checkpoints[-1]}_{omega}"
     )
 
 if __name__ == "__main__":
