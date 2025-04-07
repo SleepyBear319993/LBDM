@@ -146,14 +146,14 @@ def main():
     nx, ny = rgb_values.shape[1], rgb_values.shape[0]
     
     # Diffusion coefficient ~ (1/omega - 0.5)/3
-    omega = 0.1  # Value between 0 and 2, smaller is more diffusive
+    omega = 0.01  # Value between 0 and 2, smaller is more diffusive
     
     # Load and initialize the solver
     solver = LBMDiffusionSolver(nx, ny, omega)
     solver.initialize_from_image(rgb_values)
 
     # Define checkpoints for visualization
-    checkpoints = [100, 200, 300]  # Points at which to visualize
+    checkpoints = [200, 500, 800, 1000, 1200]  # Points at which to visualize
     
     # Create figure for visualization
     plt.figure(figsize=(12, 8))
@@ -187,7 +187,7 @@ def main():
     import os
     os.makedirs("bin", exist_ok=True)
     plt.tight_layout()
-    plt.savefig(f"bin/diffusion_result_{checkpoints[-1]}_{name}.{suffix}")
+    plt.savefig(f"bin/diffusion_result_{checkpoints[-1]}_{name}_{omega}.{suffix}")
     plt.show()
 
     
@@ -252,7 +252,7 @@ def main():
                  transform=plt.gca().transAxes, va='top', fontsize=9)
     
     plt.tight_layout()
-    plt.savefig(f"bin/rgb_histograms_{checkpoints[-1]}_{name}.{suffix}")
+    plt.savefig(f"bin/rgb_histograms_{checkpoints[-1]}_{name}_{omega}.{suffix}")
     #plt.show()
     
     print("Diffusion simulation completed and saved")
