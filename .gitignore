@@ -2,5 +2,6 @@
 __pycache__/
 .vscode/
 bin/
+bin2/
 data/
 lbm_diffusion_data_cifar0_32/

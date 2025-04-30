@@ -133,7 +133,7 @@ class LBMDiffusionSolver:
 
 def main():
     # Load the image
-    name = 'girl'
+    name = 'img35'
     suffix = 'png'
     img = Image.open(f'assets/{name}.{suffix}')
     #img = Image.open('girl.png')
@@ -153,7 +153,7 @@ def main():
     solver.initialize_from_image(rgb_values)
 
     # Define checkpoints for visualization
-    checkpoints = [200, 500, 800, 1000, 1200]  # Points at which to visualize
+    checkpoints = [10, 50, 100, 200, 500, 600, 700, 800, 900, 1000]  # Points at which to visualize
     
     # Create figure for visualization
     plt.figure(figsize=(12, 8))

@@ -6,37 +6,37 @@ import os
 import math
 
 # --- Project Imports ---
-# Assuming these files contain the necessary definitions
 from unet_lbm import UNetLBM
-from diffusion_reversal import LBMDiffusionReversalSolver
-from diffusion import compute_density_kernel, idx # Need GPU idx
-from kernel_gpu import DTYPE, w_const, threads_per_block, blocks_per_grid # Assuming constants/helpers are here
+from diffusion_reversal import LBMDiffusionReversalSolver # Assumes this has forward_step and initialize_from_image
+from diffusion import compute_density_kernel, idx
+from kernel_gpu import DTYPE, w_const, threads_per_block, blocks_per_grid
 
 # --- Configuration ---
 IMG_SIZE = 32
-N_CHANNELS_MODEL = 27 # 3 RGB * 9 LBM distributions
+N_CHANNELS_MODEL = 27
 N_OUT_CHANNELS_MODEL = 27
 NUM_CHANNELS_IMG = 3
 NUM_DISTRIBUTIONS = 9
-TOTAL_STEPS = 500 # T used during training
-OMEGA = 0.01 # Must match training omega if LBM reversal depends on it
+TOTAL_STEPS = 20 # T used during training AND for forward diffusion
+OMEGA = 0.01
 
-# Inference Steps Configuration (Ensure (a + b) * c == TOTAL_STEPS)
-STEPS_A_UNET = 1       # Number of U-Net steps per block
-STEPS_B_LBM = 3        # Number of LBM reversal steps per block
+# Inference Steps Configuration
+STEPS_A_UNET = 5
+STEPS_B_LBM = 5
 NUM_BLOCKS_C = TOTAL_STEPS // (STEPS_A_UNET + STEPS_B_LBM) # Number of times to repeat the a+b block
 TOTAL_STEPS = (STEPS_A_UNET + STEPS_B_LBM) * NUM_BLOCKS_C # Total steps for the entire process
 
+# Ensure (a + b) * c == TOTAL_STEPS
 if (STEPS_A_UNET + STEPS_B_LBM) * NUM_BLOCKS_C != TOTAL_STEPS:
-    raise ValueError(f"Configuration error: (a + b) * c = ({STEPS_A_UNET} + {STEPS_B_LBM}) * {NUM_BLOCKS_C} != {TOTAL_STEPS}")
+    raise ValueError(f"Configuration error: (a + b) * c != {TOTAL_STEPS}")
 
 MODEL_PATH = "unet_lbm_model_32.pth"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+INPUT_IMAGE_PATH = "assets/img35.png" # <<< Path to your input image
 os.makedirs("bin2", exist_ok=True) # Ensure output directory exists
-OUTPUT_FILENAME = f"bin2/generated_image_a{STEPS_A_UNET}_b{STEPS_B_LBM}_c{NUM_BLOCKS_C}.png"
+OUTPUT_FILENAME = f"bin2/generated_from_{os.path.basename(INPUT_IMAGE_PATH)}_a{STEPS_A_UNET}_b{STEPS_B_LBM}_c{NUM_BLOCKS_C}.png"
 
 # --- Helper Functions ---
-
 @cuda.jit(device=True)
 def idx_flat_to_coords(flat_idx, nx, ny):
     """ Convert flat index back to (i, j, k) """
@@ -57,9 +57,6 @@ def init_equilibrium_kernel(f_out, rho_init, nx, ny):
 def prepare_unet_input(f_gpu_list, nx, ny, device):
     """ Converts a list of 3 flat GPU arrays [nx*ny*9] to a single tensor [1, 27, ny, nx] """
     batch_tensor = torch.empty((1, N_CHANNELS_MODEL, ny, nx), dtype=torch.float32, device=device)
-    # This requires copying data potentially, might be slow if done every step.
-    # Consider if U-Net can take flat input or if GPU-side reshape is feasible.
-    # Simple approach: copy to host, reshape, copy back.
     temp_host = [f.copy_to_host() for f in f_gpu_list]
     reshaped_host = [h.reshape((NUM_DISTRIBUTIONS, ny, nx)) for h in temp_host]
     stacked_host = np.stack(reshaped_host, axis=0) # Shape (3, 9, ny, nx)
@@ -74,9 +71,8 @@ def process_unet_output(delta_f_tensor, nx, ny, num_distributions):
 
     delta_f_gpu_list = []
     for ch in range(NUM_CHANNELS_IMG):
-        # Reshape to flat (k slowest, j middle, i fastest) and copy to GPU
-        flat_channel_data = delta_f_reshaped[ch].reshape(-1) # Order should match idx_host/idx
-        delta_f_gpu_list.append(cuda.to_device(flat_channel_data))
+        flat_channel_data = delta_f_reshaped[ch].reshape(-1)
+        delta_f_gpu_list.append(cuda.to_device(flat_channel_data.astype(DTYPE))) # Ensure correct dtype
 
     return delta_f_gpu_list
 
@@ -91,6 +87,7 @@ def subtract_arrays_kernel(a, b, result):
 def main_inference():
     print(f"Using device: {DEVICE}")
     nx, ny = IMG_SIZE, IMG_SIZE
+    total_size = nx * ny * NUM_DISTRIBUTIONS # For kernel launch bounds
 
     # 1. Load Model
     print(f"Loading model from {MODEL_PATH}...")
@@ -103,126 +100,119 @@ def main_inference():
     except Exception as e:
         print(f"Error loading model state_dict: {e}")
         return
-    model.eval() # Set model to evaluation mode
+    model.eval()
     print("Model loaded.")
 
-    # 2. Initialize LBM Solver (needed for reverse_step and density calculation)
+    # 2. Load and Preprocess Input Image
+    print(f"Loading input image: {INPUT_IMAGE_PATH}")
+    try:
+        img = Image.open(INPUT_IMAGE_PATH).convert('RGB')
+        if img.size != (nx, ny):
+            print(f"Warning: Resizing input image from {img.size} to {(nx, ny)}")
+            img = img.resize((nx, ny))
+        img_np = np.array(img) / 255.0 # Normalize to [0, 1]
+        # Ensure HWC format (PIL loads as HWC) and contiguous C-order array
+        normalized_rgb_image = np.ascontiguousarray(img_np).astype(DTYPE)
+        print("Input image loaded and preprocessed.")
+    except FileNotFoundError:
+        print(f"Error: Input image not found at {INPUT_IMAGE_PATH}")
+        return
+    except Exception as e:
+        print(f"Error loading or processing image: {e}")
+        return
+
+    # 3. Initialize LBM Solver
     solver = LBMDiffusionReversalSolver(nx, ny, OMEGA)
 
-    # 3. Generate Initial State f_T (Equilibrium for specified uniform RGB)
-    print(f"Generating initial state f_{TOTAL_STEPS} (equilibrium for specified RGB)...")
-    # Define the initial density for each RGB channel
-    initial_rho_rgb = (DTYPE(0.5596), DTYPE(0.4728), DTYPE(0.2585)) # <<< SPECIFY R, G, B HERE
-    print(f"  Initial RGB densities: {initial_rho_rgb}")
+    # 4. Run Forward LBM Diffusion to get f_T
+    print(f"Running forward LBM diffusion for {TOTAL_STEPS} steps...")
+    solver.initialize_from_image(normalized_rgb_image) # Initialize f_0 based on image
 
-    f_current_gpu = []
-    total_size = nx * ny * NUM_DISTRIBUTIONS
-    threads = 32 # Example thread count for 1D kernel
-    blocks = (total_size + (threads - 1)) // threads
+    for step in range(TOTAL_STEPS):
+        solver.forward_step() # Assumes this method exists and works
+        if (step + 1) % 100 == 0:
+            print(f"  Forward step {step + 1}/{TOTAL_STEPS}")
 
-    # Initialize each channel with its specific density
-    for ch in range(NUM_CHANNELS_IMG):
-        initial_rho_ch = initial_rho_rgb[ch]
-        f_channel_gpu = cuda.device_array(total_size, dtype=DTYPE)
-        init_equilibrium_kernel[blocks, threads](f_channel_gpu, initial_rho_ch, nx, ny)
-        f_current_gpu.append(f_channel_gpu)
-        print(f"  Channel {ch} initialized with rho = {initial_rho_ch:.2f}")
+    # Get f_T (the state after TOTAL_STEPS forward steps)
+    # Ensure these are copies if solver.f might be modified later
+    f_current_gpu = [f.copy_to_host() for f in solver.f] # Copy to host first
+    f_current_gpu = [cuda.to_device(f_host) for f_host in f_current_gpu] # Copy back to device
+    print(f"Forward diffusion complete. Starting inference from f_{TOTAL_STEPS}.")
 
-    print("Initial state generated on GPU.")
 
-    # 4. Iterative Reversal Loop
+    # 5. Iterative Reversal Loop (Starts from f_T obtained above)
     current_t = TOTAL_STEPS
     print(f"Starting inference loop for {TOTAL_STEPS} steps...")
     for c_block in range(NUM_BLOCKS_C):
         print(f"  Block {c_block + 1}/{NUM_BLOCKS_C} (T = {current_t} -> {current_t - STEPS_A_UNET - STEPS_B_LBM})")
 
-        # --- 4a. U-Net Steps ---
+        # --- 5a. U-Net Steps ---
         if STEPS_A_UNET > 0:
             print(f"    Applying {STEPS_A_UNET} U-Net steps...")
-            # Pre-calculate launch bounds for subtraction kernel (assuming flat arrays)
-            sub_threads = 32 # Or another suitable number
+            sub_threads = 32
             sub_blocks = (total_size + (sub_threads - 1)) // sub_threads
 
             for a_step in range(STEPS_A_UNET):
                 if current_t <= 0: break
 
-                # Prepare input
                 f_input_tensor = prepare_unet_input(f_current_gpu, nx, ny, DEVICE)
                 t_tensor = torch.tensor([current_t], dtype=torch.float32).to(DEVICE)
 
-                # U-Net prediction
                 with torch.no_grad():
                     delta_f_pred_tensor = model(f_input_tensor, t_tensor)
 
-                # Process output and update f
                 delta_f_pred_gpu = process_unet_output(delta_f_pred_tensor, nx, ny, NUM_DISTRIBUTIONS)
 
-                # Calculate f_{t-1} = f_t - delta_f_pred using the kernel
                 f_next_gpu = []
                 for i in range(NUM_CHANNELS_IMG):
-                    # Allocate result array for the next step
                     f_next_channel_gpu = cuda.device_array_like(f_current_gpu[i])
-                    # Launch subtraction kernel
                     subtract_arrays_kernel[sub_blocks, sub_threads](
                         f_current_gpu[i], delta_f_pred_gpu[i], f_next_channel_gpu
                     )
                     f_next_gpu.append(f_next_channel_gpu)
-                    # Optional: Clean up intermediate delta_f array if memory is tight
-                    # del delta_f_pred_gpu[i]
 
                 f_current_gpu = f_next_gpu
                 current_t -= 1
-                # print(f"      U-Net step done. t = {current_t}") # Verbose
 
-        # --- 4b. LBM Reversal Steps ---
+        # --- 5b. LBM Reversal Steps ---
         if STEPS_B_LBM > 0:
             print(f"    Applying {STEPS_B_LBM} LBM reversal steps...")
-            # Set the solver's state. Assumes solver uses self.f and self.f_streamed
             solver.f = f_current_gpu
-            # Correctly copy device arrays for f_streamed
             solver.f_streamed = []
             for f in f_current_gpu:
-                new_f_streamed = cuda.device_array_like(f) # Create new device array
-                new_f_streamed.copy_to_device(f)          # Copy data from f to new array
+                new_f_streamed = cuda.device_array_like(f)
+                new_f_streamed.copy_to_device(f)
                 solver.f_streamed.append(new_f_streamed)
 
             for b_step in range(STEPS_B_LBM):
-                 if current_t <= 0: break # Should not happen if config is correct
-                 solver.reverse_step() # Assumes this updates solver.f and solver.f_streamed
+                 if current_t <= 0: break
+                 solver.reverse_step()
                  current_t -= 1
-                 # print(f"      LBM reverse step done. t = {current_t}") # Verbose
 
-            # Update f_current_gpu from solver state after LBM steps
-            f_current_gpu = solver.f # Or solver.f_streamed depending on which holds the result
+            f_current_gpu = solver.f # Or solver.f_streamed
 
         if current_t <= 0: break
 
     print("Inference loop finished.")
 
-    # 5. Get Final Image (Compute Density from f_0)
+    # 6. Get Final Image (Compute Density from f_0)
     print("Computing final image from f_0...")
     density_gpu = [cuda.device_array((ny, nx), dtype=DTYPE) for _ in range(NUM_CHANNELS_IMG)]
-    bpg = blocks_per_grid(nx, ny) # Use helper from kernel_gpu.py
+    bpg = blocks_per_grid(nx, ny)
     tpb = threads_per_block()
 
     for ch in range(NUM_CHANNELS_IMG):
         compute_density_kernel[bpg, tpb](f_current_gpu[ch], density_gpu[ch], nx, ny)
 
     density_host = [d.copy_to_host() for d in density_gpu]
-
-    # Stack channels (ny, nx, 3) - density kernel outputs density[j, i]
     img_array = np.stack(density_host, axis=-1)
-
-    # Clip, scale to [0, 255], and convert to uint8
     img_array_uint8 = (np.clip(img_array, 0, 1) * 255).astype(np.uint8)
-
-    # Create PIL Image
     img = Image.fromarray(img_array_uint8, 'RGB')
 
-    # 6. Display and Save
+    # 7. Display and Save
     print(f"Saving generated image to {OUTPUT_FILENAME}...")
     img.save(OUTPUT_FILENAME)
-    img.show() # Display the image
+    img.show()
     print("Done.")
 
 
