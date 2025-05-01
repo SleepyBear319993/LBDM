@@ -17,12 +17,12 @@ N_CHANNELS_MODEL = 27
 N_OUT_CHANNELS_MODEL = 27
 NUM_CHANNELS_IMG = 3
 NUM_DISTRIBUTIONS = 9
-TOTAL_STEPS = 250 # T used during training AND for forward diffusion
+TOTAL_STEPS = 100 # T used during training AND for forward diffusion
 OMEGA = 0.01
 
 # Inference Steps Configuration
-STEPS_A_UNET = 2
-STEPS_B_LBM = 8
+STEPS_A_UNET = 1
+STEPS_B_LBM = 9
 NUM_BLOCKS_C = TOTAL_STEPS // (STEPS_A_UNET + STEPS_B_LBM) # Number of times to repeat the a+b block
 TOTAL_STEPS = (STEPS_A_UNET + STEPS_B_LBM) * NUM_BLOCKS_C # Total steps for the entire process
 
