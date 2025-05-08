@@ -7,3 +7,4 @@ bin3/
 data/
 lbm_diffusion_data_cifar0_32/
 lbm_reversal_data_cifar0_32/
+log/
