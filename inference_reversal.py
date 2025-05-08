@@ -4,6 +4,11 @@ from numba import cuda
 from PIL import Image
 import os
 import math
+import warnings # Add this import
+from numba.core.errors import NumbaPerformanceWarning # Add this import
+
+# Suppress the specific NumbaPerformanceWarning
+warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
 # --- Project Imports ---
 # Assuming these files contain the necessary definitions
@@ -18,19 +23,19 @@ N_CHANNELS_MODEL = 27 # 3 RGB * 9 LBM distributions
 N_OUT_CHANNELS_MODEL = 27
 NUM_CHANNELS_IMG = 3
 NUM_DISTRIBUTIONS = 9
-TOTAL_STEPS = 100 # T used during training
+TOTAL_STEPS = 1000 # T used during training
 OMEGA = 0.01 # Must match training omega if LBM reversal depends on it
 
 # Inference Steps Configuration (Ensure (a + b) * c == TOTAL_STEPS)
-STEPS_A_UNET = 1       # Number of U-Net steps per block
-STEPS_B_LBM = 9        # Number of LBM reversal steps per block
+STEPS_A_UNET = 5       # Number of U-Net steps per block
+STEPS_B_LBM = 5        # Number of LBM reversal steps per block
 NUM_BLOCKS_C = TOTAL_STEPS // (STEPS_A_UNET + STEPS_B_LBM) # Number of times to repeat the a+b block
 TOTAL_STEPS = (STEPS_A_UNET + STEPS_B_LBM) * NUM_BLOCKS_C # Total steps for the entire process
 
 if (STEPS_A_UNET + STEPS_B_LBM) * NUM_BLOCKS_C != TOTAL_STEPS:
     raise ValueError(f"Configuration error: (a + b) * c = ({STEPS_A_UNET} + {STEPS_B_LBM}) * {NUM_BLOCKS_C} != {TOTAL_STEPS}")
 
-MODEL_PATH = "unet_lbm_model_32_reversal.pth"
+MODEL_PATH = "unet_lbm_model_32_reversal_e5.pth"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.makedirs("bin2", exist_ok=True) # Ensure output directory exists
 OUTPUT_FILENAME = f"bin2/generated_image_a{STEPS_A_UNET}_b{STEPS_B_LBM}_c{NUM_BLOCKS_C}.png"
@@ -112,6 +117,7 @@ def main_inference():
     # 3. Generate Initial State f_T (Equilibrium for specified uniform RGB)
     print(f"Generating initial state f_{TOTAL_STEPS} (equilibrium for specified RGB)...")
     # Define the initial density for each RGB channel
+    # (0.5596, 0.4728, 0.2585) are final RGB values of img35 after diffusion
     initial_rho_rgb = (DTYPE(0.5596), DTYPE(0.4728), DTYPE(0.2585)) # <<< SPECIFY R, G, B HERE
     print(f"  Initial RGB densities: {initial_rho_rgb}")
 

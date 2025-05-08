@@ -4,6 +4,11 @@ from numba import cuda
 from PIL import Image
 import os
 import math
+import warnings # Add this import
+from numba.core.errors import NumbaPerformanceWarning # Add this import
+
+# Suppress the specific NumbaPerformanceWarning
+warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 
 # --- Project Imports ---
 from unet_lbm import UNetLBM
@@ -17,7 +22,7 @@ N_CHANNELS_MODEL = 27
 N_OUT_CHANNELS_MODEL = 27
 NUM_CHANNELS_IMG = 3
 NUM_DISTRIBUTIONS = 9
-TOTAL_STEPS = 200 # T used during training AND for forward diffusion
+TOTAL_STEPS = 1000 # T used during training AND for forward diffusion
 OMEGA = 0.01
 
 # Inference Steps Configuration
@@ -30,7 +35,7 @@ TOTAL_STEPS = (STEPS_A_UNET + STEPS_B_LBM) * NUM_BLOCKS_C # Total steps for the 
 if (STEPS_A_UNET + STEPS_B_LBM) * NUM_BLOCKS_C != TOTAL_STEPS:
     raise ValueError(f"Configuration error: (a + b) * c != {TOTAL_STEPS}")
 
-MODEL_PATH = "unet_lbm_model_32_reversal.pth"
+MODEL_PATH = "unet_lbm_model_32_reversal_e5.pth"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 INPUT_IMAGE_PATH = "assets/img35.png" # <<< Path to your input image
 os.makedirs("bin3", exist_ok=True) # Ensure output directory exists
