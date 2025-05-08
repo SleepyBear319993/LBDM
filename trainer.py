@@ -18,7 +18,7 @@ N_OUT_CHANNELS = 27
 TOTAL_STEPS = 1000 # T used during data generation
 BATCH_SIZE = 64 # Adjust based on GPU memory (might be able to increase for smaller images)
 LEARNING_RATE = 1e-4
-EPOCHS = 25 # Adjust as needed
+EPOCHS = 1 # Adjust as needed
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MODEL_SAVE_PATH = "unet_lbm_model_32.pth" # <<< CHANGE HERE
 # --- ---

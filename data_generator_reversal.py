@@ -121,7 +121,7 @@ def main_generate_data():
     total_steps = 1000 # T
     # --- Changed output directory name ---
     output_dir = "lbm_reversal_data_cifar0_32"
-    max_images = 100 # Limit number of images for testing, set to None for all
+    max_images = None # 100 # Limit number of images for testing, set to None for all
     # --- ---
 
     os.makedirs(output_dir, exist_ok=True)
