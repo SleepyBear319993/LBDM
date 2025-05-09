@@ -6,25 +6,24 @@ import h5py
 import numpy as np
 import os
 import glob
-from sklearn.model_selection import train_test_split # Added import
-import logging # Added import
-from datetime import datetime # Added import
+import logging
+from datetime import datetime
 
 # Assuming UNetLBM is in unet_lbm.py
 from unet_lbm import UNetLBM
 
 # --- Configuration ---
-DATA_DIR = "lbm_reversal_data_cifar0_32" # <<< CHANGE HERE
-IMG_SIZE = 32 # <<< CHANGE HERE
+TRAIN_DATA_DIR = "lbm_reversal_data_cifar0_32_train" # <<< ADDED: Path to training HDF5 files
+TEST_DATA_DIR = "lbm_reversal_data_cifar0_32_test"   # <<< ADDED: Path to test/validation HDF5 files
+IMG_SIZE = 32
 N_CHANNELS = 27 # 3 RGB * 9 LBM distributions
 N_OUT_CHANNELS = 27
 TOTAL_STEPS = 1000 # T used during data generation
-BATCH_SIZE = 64 # Adjust based on GPU memory (might be able to increase for smaller images)
+BATCH_SIZE = 64
 LEARNING_RATE = 1e-4
-EPOCHS = 5 # Adjust as needed
-VAL_SPLIT = 0.2 # Proportion of data to use for validation <<< ADDED
+EPOCHS = 25
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-MODEL_SAVE_PATH = "unet_lbm_model_32_reversal_e{epoch}.pth" # <<< CHANGE HERE: Added {epoch} placeholder
+MODEL_SAVE_PATH = "unet_lbm_model_32_reversal_epoch{epoch}.pth"
 # --- ---
 
 class LBMDiffusionDataset(Dataset):
@@ -33,7 +32,7 @@ class LBMDiffusionDataset(Dataset):
         if file_paths_list is not None:
             self.file_paths = file_paths_list
         elif data_dir is not None:
-            self.data_dir = data_dir
+            self.data_dir = data_dir # Store data_dir for error messages
             self.file_paths = glob.glob(os.path.join(data_dir, "*.h5"))
         else:
             raise ValueError("Either file_paths_list or data_dir must be provided.")
@@ -43,16 +42,17 @@ class LBMDiffusionDataset(Dataset):
 
     def _check_data(self):
         if not self.file_paths:
-            if hasattr(self, 'data_dir'):
+            if hasattr(self, 'data_dir') and self.data_dir: # Check if data_dir was provided
                 raise FileNotFoundError(f"No HDF5 files found in {self.data_dir}")
-            else:
-                raise FileNotFoundError(f"No HDF5 files provided in file_paths_list")
+            else: # This case should ideally not be hit if constructor logic is correct
+                raise FileNotFoundError(f"No HDF5 files provided or found.")
         # Optional: Open one file to check dimensions
         with h5py.File(self.file_paths[0], 'r') as hf:
-            assert hf['f_t'].shape[0] == self.total_steps, "Mismatch in total_steps"
-            assert hf['f_t'].shape[1] * hf['f_t'].shape[2] == N_CHANNELS, "Mismatch in channels/distributions"
+            assert hf['f_t'].shape[0] == self.total_steps, f"Mismatch in total_steps in {self.file_paths[0]}"
+            assert hf['f_t'].shape[1] * hf['f_t'].shape[2] == N_CHANNELS, f"Mismatch in channels/distributions in {self.file_paths[0]}"
             # Add more checks if needed
-        logging.info(f"Dataset check: Found {self.num_images} HDF5 files for this dataset instance.") # Changed print to logging.info
+        logging.info(f"Dataset check: Found {self.num_images} HDF5 files for this dataset instance (from {getattr(self, 'data_dir', 'list')}).")
+
 
     def __len__(self):
         # Total number of samples is num_images * total_steps
@@ -85,7 +85,6 @@ def train():
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
     
-    # Generate timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     LOG_FILE_NAME = f"training_{timestamp}.log"
     LOG_FILE_PATH = os.path.join(LOG_DIR, LOG_FILE_NAME)
@@ -95,35 +94,40 @@ def train():
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=[
             logging.FileHandler(LOG_FILE_PATH),
-            logging.StreamHandler() # To also print to console
+            logging.StreamHandler()
         ]
     )
     # ---
 
     logging.info(f"Using device: {DEVICE}")
 
-    # Get all file paths
-    all_file_paths = glob.glob(os.path.join(DATA_DIR, "*.h5"))
-    if not all_file_paths:
-        # Use logging.error for errors before raising them
-        logging.error(f"No HDF5 files found in {DATA_DIR}. Cannot split dataset.")
-        raise FileNotFoundError(f"No HDF5 files found in {DATA_DIR}. Cannot split dataset.")
+    # Get training file paths
+    train_files = glob.glob(os.path.join(TRAIN_DATA_DIR, "*.h5"))
+    if not train_files:
+        logging.error(f"No HDF5 files found in training directory: {TRAIN_DATA_DIR}.")
+        raise FileNotFoundError(f"No HDF5 files found in training directory: {TRAIN_DATA_DIR}.")
+    logging.info(f"Found {len(train_files)} files in training directory: {TRAIN_DATA_DIR}")
 
-    # Split file paths into training and validation sets
-    train_files, val_files = train_test_split(all_file_paths, test_size=VAL_SPLIT, random_state=42) # Added random_state for reproducibility
-
-    logging.info(f"Found {len(all_file_paths)} total files. Using {len(train_files)} for training and {len(val_files)} for validation.")
+    # Get test/validation file paths
+    test_files = glob.glob(os.path.join(TEST_DATA_DIR, "*.h5"))
+    if not test_files:
+        logging.warning(f"No HDF5 files found in test directory: {TEST_DATA_DIR}. Proceeding without test/validation set.")
+        # Proceeding without test files means test_dataloader will be None or empty
+    else:
+        logging.info(f"Found {len(test_files)} files in test directory: {TEST_DATA_DIR}")
 
     # Datasets and DataLoaders
-    train_dataset = LBMDiffusionDataset(total_steps=TOTAL_STEPS, file_paths_list=train_files)
-    # Accessing train_dataset.num_images for logging after it's initialized
+    train_dataset = LBMDiffusionDataset(total_steps=TOTAL_STEPS, data_dir=TRAIN_DATA_DIR) # Use data_dir directly
     logging.info(f"Train dataset: {train_dataset.num_images} HDF5 files, {len(train_dataset)} total samples.")
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
 
-    val_dataset = LBMDiffusionDataset(total_steps=TOTAL_STEPS, file_paths_list=val_files)
-    # Accessing val_dataset.num_images for logging after it's initialized
-    logging.info(f"Validation dataset: {val_dataset.num_images} HDF5 files, {len(val_dataset)} total samples.")
-    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True)
+    test_dataloader = None
+    if test_files: # Only create test dataloader if test files were found
+        test_dataset = LBMDiffusionDataset(total_steps=TOTAL_STEPS, data_dir=TEST_DATA_DIR) # Use data_dir directly
+        logging.info(f"Test dataset: {test_dataset.num_images} HDF5 files, {len(test_dataset)} total samples.")
+        test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True)
+    else:
+        logging.info("Skipping test dataset creation as no files were found.")
 
 
     # Model
@@ -137,52 +141,49 @@ def train():
     for epoch in range(EPOCHS):
         model.train()
         running_loss = 0.0
-        for i, (f_t, t, delta_f_true) in enumerate(train_dataloader): # Changed to train_dataloader
+        for i, (f_t, t, delta_f_true) in enumerate(train_dataloader):
             f_t = f_t.to(DEVICE)
-            t = t.to(DEVICE).squeeze(-1) # Ensure t is [B]
+            t = t.to(DEVICE).squeeze(-1) 
             delta_f_true = delta_f_true.to(DEVICE)
 
-            # Zero gradients
             optimizer.zero_grad()
-
-            # Forward pass
             delta_f_pred = model(f_t, t)
-
-            # Calculate loss
             loss = criterion(delta_f_pred, delta_f_true)
-
-            # Backward pass and optimize
             loss.backward()
             optimizer.step()
 
             running_loss += loss.item()
-            if (i + 1) % 100 == 0: # Print progress every 100 batches
+            if (i + 1) % 100 == 0: 
                 logging.info(f'Epoch [{epoch+1}/{EPOCHS}], Step [{i+1}/{len(train_dataloader)}], Training Loss: {loss.item():.10f}')
 
         epoch_loss = running_loss / len(train_dataloader)
         logging.info(f'Epoch [{epoch+1}/{EPOCHS}] completed. Average Training Loss: {epoch_loss:.10f}')
 
-        # Validation phase
-        model.eval()
-        running_val_loss = 0.0
-        with torch.no_grad():
-            for i_val, (f_t_val, t_val, delta_f_true_val) in enumerate(val_dataloader):
-                f_t_val = f_t_val.to(DEVICE)
-                t_val = t_val.to(DEVICE).squeeze(-1)
-                delta_f_true_val = delta_f_true_val.to(DEVICE)
+        # Test/Validation phase
+        if test_dataloader: # Only run validation if test_dataloader was created
+            model.eval()
+            running_test_loss = 0.0
+            with torch.no_grad():
+                for i_test, (f_t_test, t_test, delta_f_true_test) in enumerate(test_dataloader):
+                    f_t_test = f_t_test.to(DEVICE)
+                    t_test = t_test.to(DEVICE).squeeze(-1)
+                    delta_f_true_test = delta_f_true_test.to(DEVICE)
 
-                delta_f_pred_val = model(f_t_val, t_val)
-                val_loss_item = criterion(delta_f_pred_val, delta_f_true_val)
-                running_val_loss += val_loss_item.item()
-                if (i_val + 1) % 100 == 0: # Print progress every 100 batches
-                    logging.info(f'Epoch [{epoch+1}/{EPOCHS}], Validation Step [{i_val+1}/{len(val_dataloader)}], Validation Loss: {val_loss_item.item():.10f}')
-        
-        epoch_val_loss = running_val_loss / len(val_dataloader)
-        logging.info(f'Epoch [{epoch+1}/{EPOCHS}] Validation Loss: {epoch_val_loss:.10f}')
-        # Optional: Add logic for early stopping or saving best model based on validation loss here
+                    delta_f_pred_test = model(f_t_test, t_test)
+                    test_loss_item = criterion(delta_f_pred_test, delta_f_true_test)
+                    running_test_loss += test_loss_item.item()
+                    if (i_test + 1) % 100 == 0: 
+                        logging.info(f'Epoch [{epoch+1}/{EPOCHS}], Test Step [{i_test+1}/{len(test_dataloader)}], Test Loss: {test_loss_item.item():.10f}')
+            
+            if len(test_dataloader) > 0:
+                epoch_test_loss = running_test_loss / len(test_dataloader)
+                logging.info(f'Epoch [{epoch+1}/{EPOCHS}] Test Loss: {epoch_test_loss:.10f}')
+            else:
+                 logging.info(f'Epoch [{epoch+1}/{EPOCHS}] Test Loss: N/A (empty test dataloader)')
+        else:
+            logging.info(f'Epoch [{epoch+1}/{EPOCHS}] Test/Validation skipped (no test data).')
 
     # Save the trained model
-    # Format the MODEL_SAVE_PATH with the total number of epochs
     final_model_path = MODEL_SAVE_PATH.format(epoch=EPOCHS) 
     torch.save(model.state_dict(), final_model_path)
     logging.info(f"Training finished. Model saved to {final_model_path}")

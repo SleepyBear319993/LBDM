@@ -35,7 +35,7 @@ TOTAL_STEPS = (STEPS_A_UNET + STEPS_B_LBM) * NUM_BLOCKS_C # Total steps for the 
 if (STEPS_A_UNET + STEPS_B_LBM) * NUM_BLOCKS_C != TOTAL_STEPS:
     raise ValueError(f"Configuration error: (a + b) * c != {TOTAL_STEPS}")
 
-MODEL_PATH = "unet_lbm_model_32_reversal_e5.pth"
+MODEL_PATH = "unet_lbm_model_32_reversal_epoch25.pth"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 INPUT_IMAGE_PATH = "assets/img35.png" # <<< Path to your input image
 os.makedirs("bin3", exist_ok=True) # Ensure output directory exists

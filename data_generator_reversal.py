@@ -120,41 +120,62 @@ def main_generate_data():
     omega = 0.01
     total_steps = 1000 # T
     # --- Changed output directory name ---
-    output_dir = "lbm_reversal_data_cifar0_32"
-    max_images = None # 100 # Limit number of images for testing, set to None for all
+    base_output_dir = "lbm_reversal_data_cifar0_32" # Base name
+    max_train_images = None # Limit number of training images, set to None for all
+    max_test_images = None  # Limit number of test images, set to None for all
     # --- ---
 
-    os.makedirs(output_dir, exist_ok=True)
+    # Create output directories
+    train_output_dir = f"{base_output_dir}_train"
+    test_output_dir = f"{base_output_dir}_test"
+    os.makedirs(train_output_dir, exist_ok=True)
+    os.makedirs(test_output_dir, exist_ok=True)
 
     # Load CIFAR10 dataset
     print("Loading CIFAR10 dataset...")
     transform = Compose([
         ToTensor() # Converts to [0, 1] tensor C x H x W
     ])
-    # Load only training data, adjust path if needed
+    
+    # Load training data
     cifar10_train = CIFAR10(root='./data', train=True, download=True, transform=transform)
-
-    # Filter for the target class
-    class_indices = [i for i, (_, label) in enumerate(cifar10_train) if label == target_class]
-    if max_images is not None:
-        class_indices = class_indices[:max_images]
-    print(f"Found {len(class_indices)} images for class {target_class}.")
+    # Load test data
+    cifar10_test = CIFAR10(root='./data', train=False, download=True, transform=transform)
 
     # Initialize LBM solver (once, dimensions won't change)
     nx, ny = img_size, img_size
-    # Ensure LBMDiffusionReversalSolver has forward_step and reverse_step methods
     solver = LBMDiffusionReversalSolver(nx, ny, omega)
 
-    # Process each image
-    for i, img_idx in enumerate(class_indices):
+    # --- Process Training Data ---
+    print(f"\n--- Processing Training Data for class {target_class} ---")
+    train_class_indices = [i for i, (_, label) in enumerate(cifar10_train) if label == target_class]
+    if max_train_images is not None:
+        train_class_indices = train_class_indices[:max_train_images]
+    print(f"Found {len(train_class_indices)} training images for class {target_class}.")
+
+    for i, img_idx in enumerate(train_class_indices):
         image_tensor, _ = cifar10_train[img_idx] # Shape: C x H x W
-        # Convert to numpy H x W x C and ensure correct dtype and contiguity
         normalized_rgb_image = np.ascontiguousarray(image_tensor.permute(1, 2, 0).numpy()).astype(DTYPE)
+        # Pass the specific output directory for training data
+        generate_data_for_image(f"train_{img_idx}", normalized_rgb_image, solver, total_steps, train_output_dir)
 
-        # Call the modified function
-        generate_data_for_image(img_idx, normalized_rgb_image, solver, total_steps, output_dir)
+    print("Training data generation complete.")
 
-    print("Data generation complete.")
+    # --- Process Test Data ---
+    print(f"\n--- Processing Test Data for class {target_class} ---")
+    test_class_indices = [i for i, (_, label) in enumerate(cifar10_test) if label == target_class]
+    if max_test_images is not None:
+        test_class_indices = test_class_indices[:max_test_images]
+    print(f"Found {len(test_class_indices)} test images for class {target_class}.")
+
+    for i, img_idx in enumerate(test_class_indices):
+        image_tensor, _ = cifar10_test[img_idx] # Shape: C x H x W
+        normalized_rgb_image = np.ascontiguousarray(image_tensor.permute(1, 2, 0).numpy()).astype(DTYPE)
+        # Pass the specific output directory for test data
+        generate_data_for_image(f"test_{img_idx}", normalized_rgb_image, solver, total_steps, test_output_dir)
+
+    print("Test data generation complete.")
+    print("\nAll data generation complete.")
 
 if __name__ == "__main__":
     main_generate_data()
