@@ -13,7 +13,11 @@ Follow the installer instructions for your operating system.
 
 This project can be run in your base Anaconda environment. Ensure your base environment has Python 3.9 or a compatible version. Core libraries like NumPy, Numba, and Matplotlib are typically included with Anaconda.
 
-Open an Anaconda Prompt (or terminal on Linux/macOS). You will run the subsequent installation commands in this environment.
+Install cudatoolkit in your conda environment for Numba cuda:
+
+```bash
+conda install cudatoolkit
+```
 
 ### 3. Install PyTorch and Torchvision
 
