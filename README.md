@@ -37,5 +37,11 @@ If you have a CUDA-enabled GPU and want to use it, ensure you install the correc
 
 ```bash
 # Example for CUDA 11.8 - verify on PyTorch website
-conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
+conda install pytorch torchvision pytorch-cuda=11.8 -c pytorch -c nvidia
 ```
+
+If you are using a GPU based on the Blackwell architecture, please install PyTorch with CUDA 12.8 or above, the command might look like this:
+
+```bash
+# Example for CUDA 12.8
+pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128
