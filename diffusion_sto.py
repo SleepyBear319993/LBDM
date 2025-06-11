@@ -40,7 +40,7 @@ def diffusion_collision_kernel_stochastic(f, omega, omega_noise, rng_states, nx,
             
             # Generate random noise term: omega_noise * w[k] * random_noise
             random_val = xoroshiro128p_uniform_float32(rng_states, thread_id)
-            noise_term = omega_noise * (random_val - 0.5) * 2.0  # Scale to [-1, 1]
+            noise_term = w_const[k] * omega_noise * (random_val - 0.5) * 2.0  # Scale to [-1, 1]
             
             # Apply collision with stochastic term
             f[idx(i, j, k, nx, ny)] = (1.0 - omega) * f[idx(i, j, k, nx, ny)] + omega * feq + noise_term
@@ -275,22 +275,22 @@ def main():
         
         # Print statistics
         print(f"{channel} Channel:")
-        print(f"  Original: Mean = {original_mean:.4f}, Variance = {original_var:.4f}")
-        print(f"  After {checkpoints[-1]} steps: Mean = {final_mean:.4f}, Variance = {final_var:.4f}")
-        print(f"  Change: Mean Δ = {final_mean - original_mean:.4f}, Variance Δ = {final_var - original_var:.4f}")
+        print(f"  Original: Mean = {original_mean:.8f}, Variance = {original_var:.8f}")
+        print(f"  After {checkpoints[-1]} steps: Mean = {final_mean:.8f}, Variance = {final_var:.8f}")
+        print(f"  Change: Mean Δ = {final_mean - original_mean:.8f}, Variance Δ = {final_var - original_var:.8f}")
         print()
         
         # Add text annotations to the histogram plots
         plt.subplot(2, 3, i+1)
-        plt.text(0.05, 0.95, f"Mean: {original_mean:.4f}\nVar: {original_var:.4f}", 
+        plt.text(0.05, 0.95, f"Mean: {original_mean:.8f}\nVar: {original_var:.8f}", 
                  transform=plt.gca().transAxes, va='top', fontsize=9)
         
         plt.subplot(2, 3, i+4)
-        plt.text(0.05, 0.95, f"Mean: {final_mean:.4f}\nVar: {final_var:.4f}", 
+        plt.text(0.05, 0.95, f"Mean: {final_mean:.8f}\nVar: {final_var:.8f}", 
                  transform=plt.gca().transAxes, va='top', fontsize=9)
     
     plt.tight_layout()
-    plt.savefig(f"bin/rgb_histograms_{checkpoints[-1]}_{name}_{omega}{stochastic_suffix}.{suffix}")
+    plt.savefig(f"bin/rgb_histograms_{checkpoints[-1]}_{name}_{omega}_{omega_noise}{stochastic_suffix}.{suffix}")
     
     print(f"Diffusion simulation completed and saved (Stochastic: {use_stochastic})")
     print(f"Omega: {omega}, Omega_noise: {omega_noise}")
