@@ -281,14 +281,14 @@ def main():
     
     # Diffusion parameters
     omega = 0.01  # Value between 0 and 2, smaller is more diffusive
-    omega_noise = 0.0005  # Stochastic term strength
+    omega_noise = 0.01  # Stochastic term strength
     
     # Load and initialize the solver
     solver = LBMDiffusionReversalSolverStochastic(nx, ny, omega, omega_noise)
     solver.initialize_from_image(rgb_values)
 
     # Define checkpoints for visualization
-    checkpoints = [200, 600, 1000]  # Points at which to visualize
+    checkpoints = [50, 100, 150, 200, 350, 500]  # Points at which to visualize
     total_steps = checkpoints[-1]
     
     # Prepare noise storage for the total number of steps
