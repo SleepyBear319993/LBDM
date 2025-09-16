@@ -1,6 +1,14 @@
 # LBDM
 Lattice Boltzmann Diffusion Model
 
+## Results
+
+The following image demonstrates the LBDM diffusion and reversal process results:
+
+![Diffusion and Reversal Process](assets/diffusion_reversal_1000_girl_0.01.png)
+
+*Diffusion and Reversal Process - MSE: 0.00000001, PSNR: 79.82 dB*
+
 ## Setup
 
 ### 1. Install Anaconda (if not already installed)

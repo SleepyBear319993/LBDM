@@ -225,7 +225,7 @@ def analyze_distribution_functions(f_data, nx, ny, channel_idx=0, stage_name="",
 
 def main():
     # Load the image
-    image_name = 'img35'
+    image_name = 'girl'
     suffix = 'png'
     try:
         img = Image.open(f'assets/{image_name}.{suffix}')
@@ -256,7 +256,7 @@ def main():
     f_initial_red = solver.f[0].copy_to_host()
     
     # Define checkpoints for visualization
-    checkpoints = [200, 600, 1000]  # Points at which to visualize
+    checkpoints = [200, 600, 1000, 1400]  # Points at which to visualize
     
     # Create figure for visualization
     plt.figure(figsize=(15, 10))
