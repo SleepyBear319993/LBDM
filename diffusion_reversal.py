@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 from numba import cuda
 import os
 
-# Use constants and helper functions from kernel_gpu.py
-from kernel_gpu import DTYPE
+# Use constants and helper functions from lattice_constants.py
+from lattice_constants import DTYPE
 from diffusion import diffusion_collision_kernel, streaming_kernel_periodic, compute_density_kernel, init_from_image_kernel, idx_host
 from reverse_collision import diffusion_collision_kernel_reverse
 from reverse_pull import streaming_kernel_periodic_reverse

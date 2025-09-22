@@ -4,7 +4,7 @@ from reverse_pull import streaming_kernel_periodic_reverse
 import numpy as np
 from numba import cuda
 from numba.cuda.random import create_xoroshiro128p_states, xoroshiro128p_uniform_float32
-from kernel_gpu import DTYPE
+from lattice_constants import DTYPE
 
 if __name__ == "__main__":
     # do stochastic collision streaming and reverse collision streaming

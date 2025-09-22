@@ -9,7 +9,7 @@ import h5py # For efficient data storage
 
 # Assuming LBMDiffusionReversalSolver is in diffusion_reversal.py
 from diffusion_reversal import LBMDiffusionReversalSolver
-from kernel_gpu import DTYPE # Make sure DTYPE matches your solver (e.g., np.float32)
+from lattice_constants import DTYPE # Make sure DTYPE matches your solver (e.g., np.float32)
 
 def generate_data_for_image(image_idx, normalized_rgb_image, solver, total_steps, output_dir):
     """

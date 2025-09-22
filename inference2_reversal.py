@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 from unet_lbm import UNetLBM
 from diffusion_reversal import LBMDiffusionReversalSolver # Assumes this has forward_step and initialize_from_image
 from diffusion import compute_density_kernel, idx
-from kernel_gpu import DTYPE, w_const, threads_per_block, blocks_per_grid
+from lattice_constants import DTYPE, w_const, threads_per_block, blocks_per_grid
 
 # --- Configuration ---
 IMG_SIZE = 32

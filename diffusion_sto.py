@@ -4,8 +4,8 @@ import time
 from numba import cuda
 import matplotlib.pyplot as plt
 
-# Use constants and helper functions from kernel_gpu.py
-from kernel_gpu import DTYPE, cx_const, cy_const, w_const
+# Use constants and helper functions from lattice_constants.py
+from lattice_constants import DTYPE, cx_const, cy_const, w_const
 
 # Define helper indexing functions
 @cuda.jit(device=True, inline=True)

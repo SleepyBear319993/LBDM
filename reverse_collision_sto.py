@@ -2,7 +2,7 @@ from diffusion_sto import diffusion_collision_kernel_stochastic, diffusion_colli
 import numpy as np
 from numba import cuda
 from numba.cuda.random import create_xoroshiro128p_states, xoroshiro128p_uniform_float32
-from kernel_gpu import DTYPE
+from lattice_constants import DTYPE
 
 @cuda.jit(fastmath=True)
 def diffusion_collision_kernel_stochastic_with_noise_storage(f, omega, omega_noise, rng_states, noise_storage, step, nx, ny):

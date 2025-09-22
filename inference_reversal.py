@@ -15,7 +15,7 @@ warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
 from unet_lbm import UNetLBM
 from diffusion_reversal import LBMDiffusionReversalSolver
 from diffusion import compute_density_kernel, idx # Need GPU idx
-from kernel_gpu import DTYPE, w_const, threads_per_block, blocks_per_grid # Assuming constants/helpers are here
+from lattice_constants import DTYPE, w_const, threads_per_block, blocks_per_grid # Assuming constants/helpers are here
 
 # --- Configuration ---
 IMG_SIZE = 32
@@ -208,7 +208,7 @@ def main_inference():
     # 5. Get Final Image (Compute Density from f_0)
     print("Computing final image from f_0...")
     density_gpu = [cuda.device_array((ny, nx), dtype=DTYPE) for _ in range(NUM_CHANNELS_IMG)]
-    bpg = blocks_per_grid(nx, ny) # Use helper from kernel_gpu.py
+    bpg = blocks_per_grid(nx, ny) # Use helper from lattice_constants.py
     tpb = threads_per_block()
 
     for ch in range(NUM_CHANNELS_IMG):
