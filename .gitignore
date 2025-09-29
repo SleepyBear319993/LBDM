@@ -9,3 +9,5 @@ lbm_diffusion_data_cifar0_32/
 lbm_reversal_data_cifar0_32_train/
 lbm_reversal_data_cifar0_32_test/
 log/
+lbm_reversal_data_cifar_all_32_train/
+lbm_reversal_data_cifar_all_32_test/
