@@ -48,16 +48,17 @@ def diffusion_collision_kernel_reverse_stochastic(fp, omega, noise_storage, step
     if i < nx and j < ny:
         # Compute density
         rho = DTYPE(0.0)
+        noise_sum = DTYPE(0.0)
         for k in range(9):
             rho += fp[idx(i, j, k, nx, ny)]
-        
+            noise_sum += noise_storage[step * nx * ny * 9 + idx(i, j, k, nx, ny)]
+
         # Reverse collision step for stochastic diffusion
         for k in range(9):
-            feq = w_const[k] * rho
             # Get the stored noise term for this time step (reverse order)
             noise_term = noise_storage[step * nx * ny * 9 + idx(i, j, k, nx, ny)]
-            # Modified reverse collision: (fp - omega*feq - noise_term) / (1 - omega)
-            fp[idx(i, j, k, nx, ny)] = (fp[idx(i, j, k, nx, ny)] - omega * feq - noise_term) / (DTYPE(1.0) - omega)
+            # Stochastic reverse collision: (fp - omega * w_const[k] * (rho - noise_sum) - noise_term) / (1 - omega)
+            fp[idx(i, j, k, nx, ny)] = (fp[idx(i, j, k, nx, ny)] - omega * w_const[k] * (rho - noise_sum) - noise_term) / (DTYPE(1.0) - omega)
 
 
 if __name__ == "__main__":

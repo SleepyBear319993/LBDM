@@ -85,7 +85,7 @@ def compute_density_kernel(f, density, nx, ny):
     """Compute density field from distributions"""
     i, j = cuda.grid(2)
     if i < nx and j < ny:
-        rho = 0.0
+        rho = DTYPE(0.0)
         for k in range(9):
             rho += f[idx(i, j, k, nx, ny)]
         density[j, i] = rho  # Note: density is in [j,i] order to match image convention
@@ -96,7 +96,7 @@ def init_from_image_kernel(image_data, f, channel, nx, ny):
     i, j = cuda.grid(2)
     if i < nx and j < ny:
         # Get normalized channel value (image data is in [j,i] suffix)
-        density = float(image_data[j, i, channel])
+        density = DTYPE(image_data[j, i, channel])
         
         # Initialize distributions with equilibrium for zero velocity
         for k in range(9):
