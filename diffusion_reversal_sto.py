@@ -6,10 +6,10 @@ import os
 
 # Use constants and helper functions from lattice_constants.py
 from lattice_constants import DTYPE
-from diffusion_sto import diffusion_collision_kernel_stochastic, streaming_kernel_periodic, compute_density_kernel, init_from_image_kernel, idx, w_const
+from diffusion_sto import streaming_kernel_periodic, compute_density_kernel, init_from_image_kernel
 from reverse_collision_sto import diffusion_collision_kernel_stochastic_with_noise_storage, diffusion_collision_kernel_reverse_stochastic
 from reverse_pull import streaming_kernel_periodic_reverse
-from numba.cuda.random import create_xoroshiro128p_states, xoroshiro128p_uniform_float32
+from numba.cuda.random import create_xoroshiro128p_states
 
 def idx_host(i, j, k, nx, ny):
     """Linear memory indexing for CPU"""
@@ -280,9 +280,9 @@ def main():
     nx, ny = rgb_values.shape[1], rgb_values.shape[0]
     
     # Diffusion parameters
-    omega = 0.01  # Value between 0 and 2, smaller is more diffusive
-    omega_noise = 0.01  # Stochastic term strength
-    
+    omega = DTYPE(0.01)  # Value between 0 and 2, smaller is more diffusive
+    omega_noise = DTYPE(0.01)  # Stochastic term strength
+
     # Load and initialize the solver
     solver = LBMDiffusionReversalSolverStochastic(nx, ny, omega, omega_noise)
     solver.initialize_from_image(rgb_values)

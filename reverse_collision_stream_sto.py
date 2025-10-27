@@ -1,9 +1,9 @@
-from diffusion_sto import diffusion_collision_kernel_stochastic, diffusion_collision_kernel, streaming_kernel_periodic, idx, w_const
+from diffusion_sto import streaming_kernel_periodic
 from reverse_collision_sto import diffusion_collision_kernel_stochastic_with_noise_storage, diffusion_collision_kernel_reverse_stochastic
 from reverse_pull import streaming_kernel_periodic_reverse
 import numpy as np
 from numba import cuda
-from numba.cuda.random import create_xoroshiro128p_states, xoroshiro128p_uniform_float32
+from numba.cuda.random import create_xoroshiro128p_states
 from lattice_constants import DTYPE
 
 if __name__ == "__main__":

@@ -18,7 +18,16 @@ def idx_host(i, j, k, nx, ny):
     return i + j * nx + k * nx * ny
 
 # Add random number generation support
-from numba.cuda.random import create_xoroshiro128p_states, xoroshiro128p_uniform_float32
+from numba.cuda.random import (
+    create_xoroshiro128p_states,
+    xoroshiro128p_uniform_float32,
+    xoroshiro128p_uniform_float64,
+)
+
+if np.dtype(DTYPE) == np.float64:
+    xoroshiro_uniform = xoroshiro128p_uniform_float64
+else:
+    xoroshiro_uniform = xoroshiro128p_uniform_float32
 
 # LBM kernels for diffusion with stochastic term
 @cuda.jit(fastmath=True)
@@ -30,7 +39,7 @@ def diffusion_collision_kernel_stochastic(f, omega, omega_noise, rng_states, nx,
         thread_id = i + j * nx
         
         # Compute density
-        rho = 0.0
+        rho = DTYPE(0.0)
         for k in range(9):
             rho += f[idx(i, j, k, nx, ny)]
         
@@ -39,11 +48,11 @@ def diffusion_collision_kernel_stochastic(f, omega, omega_noise, rng_states, nx,
             feq = w_const[k] * rho  # Equilibrium for diffusion
             
             # Generate random noise term: omega_noise * w[k] * random_noise
-            random_val = xoroshiro128p_uniform_float32(rng_states, thread_id)
-            noise_term = w_const[k] * omega_noise * (random_val - 0.5) * 2.0  # Scale to [-1, 1]
+            random_val = xoroshiro_uniform(rng_states, thread_id)
+            noise_term = w_const[k] * omega_noise * (random_val - DTYPE(0.5)) * DTYPE(2.0)  # Scale to [-1, 1]
             
             # Apply collision with stochastic term
-            f[idx(i, j, k, nx, ny)] = (1.0 - omega) * f[idx(i, j, k, nx, ny)] + omega * feq + noise_term
+            f[idx(i, j, k, nx, ny)] = (DTYPE(1.0) - omega) * f[idx(i, j, k, nx, ny)] + omega * feq + noise_term
 
 @cuda.jit(fastmath=True)
 def diffusion_collision_kernel(f, omega, nx, ny):
@@ -51,7 +60,7 @@ def diffusion_collision_kernel(f, omega, nx, ny):
     i, j = cuda.grid(2)
     if i < nx and j < ny:
         # Compute density
-        rho = 0.0
+        rho = DTYPE(0.0)
         for k in range(9):
             rho += f[idx(i, j, k, nx, ny)]
         
@@ -183,8 +192,8 @@ def main():
     nx, ny = rgb_values.shape[1], rgb_values.shape[0]
     
     # Diffusion parameters
-    omega = 0.01  # Value between 0 and 2, smaller is more diffusive
-    omega_noise = 0.01  # Stochastic term strength (adjust as needed)
+    omega = DTYPE(0.01)  # Value between 0 and 2, smaller is more diffusive
+    omega_noise = DTYPE(0.01)  # Stochastic term strength (adjust as needed)
     use_stochastic = True  # Enable stochastic collision
     
     # Load and initialize the solver
