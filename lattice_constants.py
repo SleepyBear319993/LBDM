@@ -1,7 +1,7 @@
 import numpy as np
 
 # Data type macro
-DTYPE = np.float64  # or np.float64 for double precision
+DTYPE = np.float32  # or np.float64 for double precision
 
 #--------------------------------------------------------------------
 # Global constants for D2Q9 (Python tuples are accessible inside JITed kernels)

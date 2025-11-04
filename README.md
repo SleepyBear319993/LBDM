@@ -31,10 +31,9 @@ conda install -c conda-forge numba-cuda "cuda-version=13"
 
 With your Anaconda environment activated (which is usually the base environment by default when you open Anaconda Prompt), install PyTorch and Torchvision. It's recommended to install them using the official PyTorch website's instructions to ensure compatibility with your CUDA version.
 
-Go to [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/) and select your preferences (e.g., OS, Package, Compute Platform). Then, run the provided command in your Anaconda Prompt.
-
-Or directly:
+Go to [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/) and select your preferences (e.g., OS, Package, Compute Platform). For
+CUDA 13.0:
 
 ```bash
-pip install torch torchvision
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu130
 ```
