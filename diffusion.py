@@ -1,8 +1,5 @@
-from PIL import Image
 import numpy as np
-import time
 from numba import cuda
-import matplotlib.pyplot as plt
 
 # Use constants and helper functions from lattice_constants.py
 from lattice_constants import DTYPE, cx_const, cy_const, w_const
@@ -24,14 +21,14 @@ def diffusion_collision_kernel(f, omega, nx, ny):
     i, j = cuda.grid(2)
     if i < nx and j < ny:
         # Compute density
-        rho = 0.0
+        rho = DTYPE(0.0)
         for k in range(9):
             rho += f[idx(i, j, k, nx, ny)]
         
         # Collision step for diffusion (no velocity component)
         for k in range(9):
             feq = w_const[k] * rho  # Equilibrium for diffusion
-            f[idx(i, j, k, nx, ny)] = (1.0 - omega) * f[idx(i, j, k, nx, ny)] + omega * feq
+            f[idx(i, j, k, nx, ny)] = (DTYPE(1.0) - omega) * f[idx(i, j, k, nx, ny)] + omega * feq
 
 @cuda.jit
 def streaming_kernel_periodic(f_in, f_out, nx, ny):
@@ -49,7 +46,7 @@ def compute_density_kernel(f, density, nx, ny):
     """Compute density field from distributions"""
     i, j = cuda.grid(2)
     if i < nx and j < ny:
-        rho = 0.0
+        rho = DTYPE(0.0)
         for k in range(9):
             rho += f[idx(i, j, k, nx, ny)]
         density[j, i] = rho  # Note: density is in [j,i] order to match image convention
@@ -61,7 +58,7 @@ def init_from_image_kernel(image_data, f, channel, nx, ny):
     i, j = cuda.grid(2)
     if i < nx and j < ny:
         # Get normalized channel value (image data is in [j,i] suffix)
-        density = float(image_data[j, i, channel])# / 255.0
+        density = DTYPE(image_data[j, i, channel])# / 255.0
         
         # Initialize distributions with equilibrium for zero velocity
         for k in range(9):
@@ -130,132 +127,3 @@ class LBMDiffusionSolver:
         b = self.density[2].copy_to_host()
         rgb = np.stack((r, g, b), axis=-1)
         return rgb
-
-def main():
-    # Load the image
-    name = 'img35'
-    suffix = 'png'
-    img = Image.open(f'assets/{name}.{suffix}')
-    #img = Image.open('girl.png')
-    rgb_img = img.convert('RGB')
-    rgb_values = np.array(rgb_img) / 255.0  # Normalize to [0, 1]
-    
-    print(f"Image shape: {rgb_values.shape}")
-    
-    # Create LBM solver
-    nx, ny = rgb_values.shape[1], rgb_values.shape[0]
-    
-    # Diffusion coefficient ~ (1/omega - 0.5)/3
-    omega = 0.01  # Value between 0 and 2, smaller is more diffusive
-    
-    # Load and initialize the solver
-    solver = LBMDiffusionSolver(nx, ny, omega)
-    solver.initialize_from_image(rgb_values)
-
-    # Define checkpoints for visualization
-    checkpoints = [10, 50, 100, 200, 500, 600, 700, 800, 900, 1000]  # Points at which to visualize
-    
-    # Create figure for visualization
-    plt.figure(figsize=(12, 8))
-    
-    # Plot original image
-    plt.subplot(1, len(checkpoints)+1, 1)
-    plt.imshow(rgb_values)
-    plt.title("Original")
-    plt.axis('off')
-    
-    # Run forward diffusion with checkpoints
-    results = []
-    current_step = 0
-    
-    for i, step in enumerate(checkpoints):
-        # Run diffusion until this checkpoint
-        steps_to_run = step - current_step
-        solver.run(steps_to_run)
-        current_step = step
-        
-        # Get and save result
-        result = solver.get_result_image()
-        results.append(result)
-        
-        # Plot the result
-        plt.subplot(1, len(checkpoints)+1, i+2) # (Number of rows = 1, Number of columns, Position)
-        plt.imshow(np.clip(result, 0, 1))
-        plt.title(f"Forward: {step} steps")
-        plt.axis('off')
-    # Save the figure
-    import os
-    os.makedirs("bin", exist_ok=True)
-    plt.tight_layout()
-    plt.savefig(f"bin/diffusion_result_{checkpoints[-1]}_{name}_{omega}.{suffix}")
-    plt.show()
-
-    
-    # Plot histograms of original and final RGB values
-    plt.figure(figsize=(15, 10))
-    
-    # Channel names and colors for plotting
-    channels = ['Red', 'Green', 'Blue']
-    colors = ['red', 'green', 'blue']
-    
-    # Plot histograms for the original image
-    for i in range(3):
-        plt.subplot(2, 3, i+1)
-        plt.hist(rgb_values[:,:,i].flatten(), bins=256, range=(0,1), 
-                 color=colors[i], alpha=0.7)
-        plt.title(f"Original - {channels[i]} Channel")
-        plt.xlabel("Pixel Value")
-        plt.ylabel("Frequency")
-    
-    final = results[-1]
-    # Plot histograms for the final diffused image
-    for i in range(3):
-        plt.subplot(2, 3, i+4)
-        plt.hist(final[:,:,i].flatten(), bins=256, range=(0,1), 
-                 color=colors[i], alpha=0.7)
-        plt.title(f"After {checkpoints[-1]} steps - {channels[i]} Channel")
-        plt.xlabel("Pixel Value")
-        plt.ylabel("Frequency")
-    
-    # After the histograms but before saving the figure
-    
-    # Calculate and display mean and variance statistics
-    print("\nRGB Channel Statistics:")
-    print("------------------------")
-    
-    # Calculate statistics for each channel
-    for i, channel in enumerate(channels):
-        # Original image statistics
-        original_values = rgb_values[:,:,i].flatten()
-        original_mean = np.mean(original_values)
-        original_var = np.var(original_values)
-        
-        # Final image statistics
-        final_values = final[:,:,i].flatten()
-        final_mean = np.mean(final_values)
-        final_var = np.var(final_values)
-        
-        # Print statistics
-        print(f"{channel} Channel:")
-        print(f"  Original: Mean = {original_mean:.4f}, Variance = {original_var:.4f}")
-        print(f"  After {checkpoints[-1]} steps: Mean = {final_mean:.4f}, Variance = {final_var:.4f}")
-        print(f"  Change: Mean Δ = {final_mean - original_mean:.4f}, Variance Δ = {final_var - original_var:.4f}")
-        print()
-        
-        # Add text annotations to the histogram plots
-        plt.subplot(2, 3, i+1)
-        plt.text(0.05, 0.95, f"Mean: {original_mean:.4f}\nVar: {original_var:.4f}", 
-                 transform=plt.gca().transAxes, va='top', fontsize=9)
-        
-        plt.subplot(2, 3, i+4)
-        plt.text(0.05, 0.95, f"Mean: {final_mean:.4f}\nVar: {final_var:.4f}", 
-                 transform=plt.gca().transAxes, va='top', fontsize=9)
-    
-    plt.tight_layout()
-    plt.savefig(f"bin/rgb_histograms_{checkpoints[-1]}_{name}_{omega}.{suffix}")
-    #plt.show()
-    
-    print("Diffusion simulation completed and saved")
-
-if __name__ == "__main__":
-    main()
