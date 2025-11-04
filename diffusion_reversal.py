@@ -256,7 +256,7 @@ def main():
     f_initial_red = solver.f[0].copy_to_host()
     
     # Define checkpoints for visualization
-    checkpoints = [200, 600, 1000, 1400]  # Points at which to visualize
+    checkpoints = [200, 600, 1000, 1400, 1800]  # Points at which to visualize
     
     # Create figure for visualization
     plt.figure(figsize=(15, 10))
